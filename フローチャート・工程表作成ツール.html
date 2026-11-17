@@ -2101,6 +2101,65 @@ function dropSub(node, j, dx, dy) {
   return dropDone(node.key, [subId], `小項目「${sub.text}」を手順にしました`);
 }
 
+// 黒い点を動かしたとき：照査・打合せの点なら「@」の行を、並行（左）の点なら分かれる所・合流先を書き換える
+function dropDot(key) {
+  const { g, L, lineInfo } = state;
+  const dot = L.dots.find(d => d.key === key);
+  if (!dot) return false;
+  const name = key.slice(1).replace(/\|\d+$/, "");
+  if (name[0] !== "<" && name[0] !== ">") {
+    const note = L.notes.find(n => n.uid && n.uid.startsWith(`${name}|n`));
+    return note ? moveNoteByDrag(note.key, dot.y) : false;
+  }
+  // 並行（左）：点の高さのすぐ下にある手順
+  const units = g.units, M = units.length;
+  const below = units.findIndex((u, i) => topOf(L.nodes[g.entry[i]]) > dot.y);
+  const uid = name.slice(1), sl = g.sideLanes.find(x => L.nodes[name[0] === "<" ? x.ids[0] : x.ids[x.ids.length - 1]].uid === uid);
+  if (!sl) return false;
+  const lines = ta.value.split("\n");
+  let a = sl.line, b = a;
+  while (b + 1 < lines.length && lineInfo[b + 1] && ["side", "sub", "memo"].includes(lineInfo[b + 1].type)) b++;
+  const region = lineIds.slice(a, b + 1), sideIdx = [];
+  for (let i = a; i <= b; i++) if (lineInfo[i].type === "side") sideIdx.push(i);
+  const headOf = i => { const t = clean(lines[i]).replace(SIDE_RE, "").replace(/＞/g, ">"); const p = t.indexOf(">"); return clean(p >= 0 ? t.slice(0, p) : t); };
+  // 合流先の書き方：名前が 1 つだけならその名前、ほかは #番号
+  const nameOf = i => {
+    const t = units[i].text;
+    return units[i].kind !== "block" && t && !/^[#＃]/.test(t) && units.filter(u => u.kind !== "block" && u.text === t).length === 1 ? t : `#${i + 1}`;
+  };
+  let from = sl.from, to = sl.to < 0 ? M : sl.to, msg;
+  if (name[0] === "<") {
+    // 分かれる所：点のすぐ下の手順と並行して進む（その手順のかたまりの後ろに行を移す）
+    const f = below < 0 ? M - 1 : below;
+    if (f === from || units[f].kind === "block") return false;
+    from = f;
+    if (to <= from) to = from + 1;
+    msg = `並行（左）を「${units[from].text}」から分かれるようにしました`;
+  } else {
+    // 合流先：点のすぐ下の手順
+    const t = below < 0 ? M : below;
+    if (t === to || t <= from) return false;
+    to = t;
+    msg = to < M ? `並行（左）の合流先を「${units[to].text || `#${to + 1}`}」にしました` : "並行（左）を最後まで合流しないようにしました";
+  }
+  const target = to === from + 1 || to >= M ? "" : nameOf(to);
+  const refs = target.startsWith("#") ? refsOf(`> ${target}`) : [];
+  const out = [];
+  let first = true;
+  for (let i = a; i <= b; i++) {
+    if (lineInfo[i].type !== "side") { out.push({ t: lines[i], id: lineIds[i] }); continue; }
+    out.push({ t: `< ${headOf(i)}${first && target ? ` > ${target}` : ""}`, id: lineIds[i] });
+    first = false;
+  }
+  editRows(rows => {
+    rows.splice(rowAt(rows, region[0]), region.length);
+    if (name[0] === "<") insertAt(rows, { after: lineIds[(() => { let e = units[from].line; while (e + 1 < lineInfo.length && lineInfo[e + 1] && ["sub", "memo"].includes(lineInfo[e + 1].type)) e++; return e; })()] }, out);
+    else rows.splice(rowAt(rows, lineIds[a - 1]) + 1, 0, ...out);
+  });
+  if (target.startsWith("#")) keepRefs(out.find(r => r.t.startsWith("<")).id, out.find(r => r.t.startsWith("<")).t, refs);
+  return dropDone(key, [], msg);
+}
+
 // 小項目を上下にドラッグしたら、同じ手順の中で並べ替える（手順の欄の「・」の行も動かす）
 function reorderSub(node, j, dy) {
   const subs = node.subs, boxes = node.subBoxes;
@@ -2117,10 +2176,11 @@ function reorderSub(node, j, dy) {
 }
 
 // 照査・打合せの箱を別の場所に動かしたら、手順の欄の「@」の行もそこへ動かす
-function moveNoteByDrag(key) {
+function moveNoteByDrag(key, atY) {
   const { g, L, lineInfo } = state;
   const note = L.notes.find(n => n.key === key);
   if (!note) return false;
+  const y = atY ?? note.y;   // 点を動かしたときは点の高さで決める
   const units = g.units, nodeOf = i => L.nodes[g.entry[i]];
   // 置ける場所：見出しの横（小項目があるとき）、小項目の間、手順のあと
   const slots = [];
@@ -2134,7 +2194,7 @@ function moveNoteByDrag(key) {
     slots.push({ unit: i, pos: k, y: next ? (bottomOf(ex) + topOf(next)) / 2 : bottomOf(ex) + 10 });
   });
   if (!slots.length) return false;
-  const best = slots.reduce((a, b) => (Math.abs(b.y - note.y) < Math.abs(a.y - note.y) ? b : a));
+  const best = slots.reduce((a, b) => (Math.abs(b.y - y) < Math.abs(a.y - y) ? b : a));
   const cur = nodeOf(note.unit), k0 = hasSubs(cur) ? cur.subs.length : 0;
   if (best.unit === note.unit && best.pos === Math.min(note.pos, k0)) return false;
 
@@ -2265,6 +2325,7 @@ window.addEventListener("pointerup", e => {
     else if (!dropSub(d.node, d.j, d.dx, d.dy)) update();
     return;
   }
+  if (d.moved && d.dot && dropDot(d.key)) return;
   if (d.moved && d.isNote && moveNoteByDrag(d.key)) return;
   if (d.moved && !d.dot && !d.wire && d.box && dropBox(d.key)) return;
   if (d.moved) commit();
