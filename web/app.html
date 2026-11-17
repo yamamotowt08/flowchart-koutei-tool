@@ -2517,6 +2517,7 @@ function normalizeSched(o) {
     const x = newRow();
     ROW_FIELDS.forEach(k => { if (r[k] != null) x[k] = String(r[k]); });
     if (typeof r.id === "string" && r.id) x.id = r.id;
+    if (r.fs && typeof r.fs === "object") x.fs = r.fs;   // フローチャートから取り込んだときの形
     return x;
   });
   if (typeof o.ignoreSync === "string") sc.ignoreSync = o.ignoreSync;
@@ -2982,7 +2983,9 @@ function computePlan() {
 
 // フローチャートの手順 → 作業項目（手順は 1. 2.、小項目は 1.1. 1.2.、照査・打合せは最後にまとめる）
 const ITEM_NUM_RE = /^[0-9０-９]+(?:[.．][0-9０-９]+)*[.．)）、:：]\s*/;
-const itemKey = name => clean(toHalf(clean(name)).replace(/^[0-9]+(?:\.[0-9]+)*[.)）、:：]?\s*/, ""));
+const noteSafe = t => t.replace(/・/g, "･").replace(/[、,，]/g, "､").replace(/[\/／]/g, "∕");
+const noteUnsafe = t => t.replace(/･/g, "・").replace(/､/g, "、").replace(/∕/g, "／");
+const itemKey = name => clean(toHalf(noteUnsafe(clean(name))).replace(/^[0-9]+(?:\.[0-9]+)*[.)）、:：]?\s*/, ""));
 // フローチャートの作業（四角の箱）を、手順の欄のどこにあるかと一緒に並べる
 //   kind: step=本線の手順 / sub=小項目 / lane=同時進行の中 / side=並行（左）の中 / note=照査・打合せ
 function flowItems() {
@@ -2991,19 +2994,33 @@ function flowItems() {
   const after = new Map();
   sides.forEach(sd => { const a = after.get(sd.after) || []; a.push(sd); after.set(sd.after, a); });
   const strip = t => clean(clean(t).replace(ITEM_NUM_RE, ""));
-  const step = (st, unit, kind) => {
+  const src = ta.value.replace(/\r\n?/g, "\n").split("\n");
+  const step = (st, unit, kind, shape = {}) => {
     if (st.kind !== "proc" || !strip(st.text)) return;
     const k = kind === "step" ? 0 : +String(st.uid).split(/\|<?/).pop();
-    out.push({ text: strip(st.text), depth: 1, kind, unit, line: st.line, k });
-    (st.subs || []).forEach(sb => { if (strip(sb.text)) out.push({ text: strip(sb.text), depth: 2, kind: "sub", unit, line: sb.line }); });
+    out.push({ text: strip(st.text), depth: 1, kind, unit, line: st.line, k, shape: Object.assign({ kind }, shape) });
+    (st.subs || []).forEach(sb => { if (strip(sb.text)) out.push({ text: strip(sb.text), depth: 2, kind: "sub", unit, line: sb.line, shape: { kind: "sub" } }); });
   };
+  // 合流先は、名前が 1 つだけならその名前、ほかは書いてあったとおり
+  const targetName = t => {
+    if (!t) return "";
+    const r = findTarget(t, units), u = r.index >= 0 ? units[r.index] : null;
+    return u && u.kind !== "block" && u.text && units.filter(x => x.text === u.text).length === 1 ? strip(u.text) : t;
+  };
+  const noteAt = {};   // 照査・打合せの名前 → もとの「@」の行と、付いていた手順・場所
   units.forEach((u, i) => {
-    if (u.kind === "block") u.lanes.forEach(l => l.forEach(st => step(st, i, "lane")));
+    if (u.kind === "block") u.lanes.forEach((l, j) => l.forEach(st => step(st, i, "lane", { blk: u.uid, lane: j })));
     else step(u, i, "step");
-    (u.notes || []).forEach(nt => nt.items.forEach(t => { t = strip(t); if (t && !notes.includes(t)) notes.push(t); }));
-    (after.get(u) || []).forEach(sd => sd.items.forEach(st => step(st, i, "side")));
+    const anchor = u.kind === "block" ? itemKey(strip((u.lanes[0] && u.lanes[0][0] && u.lanes[0][0].text) || "")) : itemKey(strip(u.text));
+    (u.notes || []).forEach(nt => nt.items.forEach(t => {
+      t = noteUnsafe(strip(t));
+      if (!t) return;
+      if (!notes.includes(t)) notes.push(t);
+      (noteAt[t] = noteAt[t] || []).push({ line: clean(src[nt.line] || ""), anchor, pos: Number.isFinite(nt.pos) ? nt.pos : -1 });
+    }));
+    (after.get(u) || []).forEach(sd => sd.items.forEach(st => step(st, i, "side", { grp: lineIds[sd.line], target: targetName(sd.target) })));
   });
-  notes.forEach(t => out.push({ text: t, depth: 1, kind: "note", unit: null }));
+  notes.forEach(t => out.push({ text: t, depth: 1, kind: "note", unit: null, shape: { kind: "note", at: noteAt[t] || [] } }));
   out.forEach(it => { it.key = itemKey(it.text); if (it.line !== undefined) it.id = lineIds[it.line]; });
   return out;
 }
@@ -3011,8 +3028,10 @@ function flowTasks() {
   let n = 0, m = 0;
   return flowItems().map(it => (it.depth === 1 ? `${++n}.${(m = 0, it.text)}` : `${n}.${++m}.${it.text}`));
 }
-const flowSignature = () => flowTasks().map(itemKey).join("\n");
-const planSignature = () => sched.rows.filter(r => clean(r.name)).map(r => itemKey(r.name)).join("\n");
+const signature = items => items.filter(it => !isNoteItem(it)).map(it => it.key).join("\n") + "\n@" + items.filter(isNoteItem).map(it => it.key).sort().join("\n");
+const isNoteItem = it => (it.fs ? it.fs.kind : it.kind) === "note";
+const flowSignature = () => signature(flowItems());
+const planSignature = () => signature(planItems());
 
 // 工程表の作業項目 → フローチャートの手順（「1.」は手順、「1.1.」はすぐ上の手順の小項目）。
 // 同じ名前の箱はそのまま残し、名前を変えた行は同じ箱の名前を変え、増えた行は足し、消した行は消す。
@@ -3034,16 +3053,64 @@ function renumberRows(rows) {
   }
   return changed;
 }
+const NOTE_NAME_RE = /照査|打合|打ち合|協議/;
 function planItems() {
+  let anchor = "";
   return sched.rows.filter(r => clean(r.name)).map(r => {
     const name = clean(r.name), m = name.match(PLAN_NUM_RE);
     const text = clean(m ? name.slice(m[0].length) : name) || name;
-    return { text, depth: m && m[2] ? 2 : 1, key: itemKey(text) };
+    const depth = m && m[2] ? 2 : 1, key = itemKey(text);
+    // 形を覚えていない行（工程表で打った行）は、照査・打合せらしい名前なら直前の手順から横に分ける
+    const fs = r.fs || (NOTE_NAME_RE.test(text) ? { kind: "note", at: [] } : null);
+    const it = { text, depth, key, fs, anchor };
+    if (depth === 1 && (!fs || fs.kind === "step")) anchor = key;
+    return it;
   });
 }
+// 手順の行か（小項目・同時進行・並行・照査打合せ・メモの行ではない）と、その手順の名前
+const isStepRow = t => { t = clean(t); return !!t && !/^[・･\-*|｜<＜@＠※'\/]/.test(t); };
+const stepKeyOf = t => itemKey(clean(clean(t).replace(/^[○◯◇◆□■][\s　]/, "").split(/[>＞]/)[0]).replace(ITEM_NUM_RE, ""));
+function placeNotes(rows, adds, P, fallback) {
+  if (!adds.length) return;
+  const want = new Set(adds.map(p => p.key)), done = new Set(), lines = [];
+  // 取り込んだときの「@」の行をそのまま戻す（ほかの照査・打合せと一緒の行なら、工程表にあるものだけ残す）
+  for (const p of adds) for (const a of (p.fs.at || [])) {
+    const id = `${a.line}|${a.anchor}|${a.pos}`;
+    if (done.has(id)) continue;
+    done.add(id);
+    const items = clean(a.line).replace(NOTE_RE, "").split(/[、,，・\/／]/).map(clean).filter(t => t && P.some(q => q.key === itemKey(t)));
+    if (items.some(t => want.has(itemKey(t)))) lines.push({ items, anchor: a.anchor, pos: a.pos });
+  }
+  // 工程表で打った照査・打合せは、直前の手順のあとに付ける（続いていれば 1 行にまとめる）
+  for (const p of adds) {
+    if ((p.fs.at || []).length) continue;
+    const last = lines[lines.length - 1];
+    if (last && last.anchor === p.anchor && last.pos === -1 && last.typed) last.items.push(p.text);
+    else lines.push({ items: [p.text], anchor: p.anchor, pos: -1, typed: true });
+  }
+  for (const l of lines) {
+    const row = { t: `@${l.items.map(noteSafe).join("、")}`, id: newId() };
+    const a = rows.findIndex(r => isStepRow(r.t) && stepKeyOf(r.t) === l.anchor);
+    if (a < 0) { insertAt(rows, fallback, [row]); continue; }
+    let at = a + 1;
+    if (l.pos !== 0) {
+      // 小項目の pos 番目のあと／手順のかたまりの最後
+      let subs = 0;
+      while (at < rows.length && !isStepRow(rows[at].t) && !LANE_RE.test(clean(rows[at].t))) {
+        const t = clean(rows[at].t);
+        if (SUB_RE.test(t)) { if (l.pos > 0 && subs === l.pos) break; subs++; }
+        else if (l.pos > 0 && subs === l.pos) break;
+        at++;
+      }
+    }
+    rows.splice(at, 0, row);
+  }
+}
 function exportToFlow() {
-  const F = flowItems(), P = planItems();
-  if (!P.length) { toast("工程表に作業項目がありません。"); return; }
+  const FA = flowItems(), PA = planItems();
+  if (!PA.length) { toast("工程表に作業項目がありません。"); return; }
+  // 照査・打合せは並び順に関係なく名前で合わせる。ほかの作業は順番どおりに合わせる
+  const F = FA.filter(f => !isNoteItem(f)), P = PA.filter(p => !isNoteItem(p));
   // 同じ名前どうしを順番どおりに対応させる（LCS）
   const n = F.length, m = P.length, T = Array.from({ length: n + 1 }, () => new Array(m + 1).fill(0));
   for (let i = n - 1; i >= 0; i--) for (let j = m - 1; j >= 0; j--) T[i][j] = F[i].key === P[j].key ? T[i + 1][j + 1] + 1 : Math.max(T[i + 1][j], T[i][j + 1]);
@@ -3064,6 +3131,14 @@ function exportToFlow() {
     for (let y = 0; y < k; y++) ops.push({ f: dels[y].f, p: ins[y].p, rename: true });
     dels.slice(k).forEach(o => ops.push(o));
     ins.slice(k).forEach(o => ops.push(o));
+  }
+  {
+    const FN = FA.filter(isNoteItem), PN = PA.filter(isNoteItem);
+    const fOnly = FN.filter(f => !PN.some(p => p.key === f.key)), pOnly = PN.filter(p => !FN.some(f => f.key === p.key));
+    const k = Math.min(fOnly.length, pOnly.length);
+    for (let y = 0; y < k; y++) ops.push({ f: fOnly[y], p: pOnly[y], rename: true });
+    fOnly.slice(k).forEach(f => ops.push({ f, del: true }));
+    pOnly.slice(k).forEach(p => ops.push({ p, add: true }));
   }
   if (!ops.some(o => o.rename || o.del || o.add)) { toast("フローチャートは、工程表の作業項目と同じです。"); return; }
   commit();
@@ -3092,13 +3167,13 @@ function exportToFlow() {
     if (!lineInfo[lineIds.indexOf(r.id)] || lineInfo[lineIds.indexOf(r.id)].type !== "memo") return;
     const items = clean(r.t).replace(NOTE_RE, "").split(/[、,，・\/／]/).map(clean).filter(Boolean);
     if (!items.some(t => itemKey(t) === itemKey(from))) return;
-    const next = items.map(t => (itemKey(t) === itemKey(from) ? to : t)).filter(Boolean);
+    const next = items.map(t => (itemKey(t) === itemKey(from) ? (to && noteSafe(to)) : t)).filter(Boolean);
     if (next.length) rows[x].t = `@${next.join("、")}`; else drop.add(r.id);
   });
-  const counts = { add: 0, rename: 0, del: 0 };
+  const counts = { add: 0, rename: 0, del: 0 }, notesToAdd = [];
   editRows(rows => {
-    for (const o of ops) {
-      const f = o.f;
+    for (let x = 0; x < ops.length; x++) {
+      const o = ops[x], f = o.f;
       if (o.rename || o.del) {
         counts[o.del ? "del" : "rename"]++;
         const to = o.del ? null : o.p.text;
@@ -3108,6 +3183,35 @@ function exportToFlow() {
         else { const r = rows[rowAt(rows, f.id)]; r.t = r.t.includes(f.text) ? r.t.replace(f.text, to) : (f.kind === "sub" ? `・${to}` : to); }
       }
       if (o.add) {
+        const fs = o.p.fs || {};
+        // 照査・打合せは手順にせず、あとで「@」の行として横に付ける
+        if (fs.kind === "note") { counts.add++; notesToAdd.push(o.p); continue; }
+        // 同時進行：同じかたまりの行をまとめて、列ごとに「| … → …」の行にする
+        if (fs.kind === "lane") {
+          const run = [o.p];
+          while (ops[x + 1] && ops[x + 1].add && ops[x + 1].p.fs && ops[x + 1].p.fs.kind === "lane" && ops[x + 1].p.fs.blk === fs.blk) run.push(ops[++x].p);
+          const lanes = [];
+          run.forEach(q => { const j = q.fs.lane || 0; (lanes[j] = lanes[j] || []).push(q.text); });
+          const add = lanes.filter(Boolean).map(l => ({ t: `| ${l.join(" → ")}`, id: newId() }));
+          insertAt(rows, slot1, add);
+          slot1 = { after: add[add.length - 1].id, newStep: true }; slot2 = null; counts.add += run.length;
+          continue;
+        }
+        // 並行（左）：すぐ上の手順と並行に左で進める（小項目も一緒、合流先は 1 行目に）
+        if (fs.kind === "side") {
+          const run = [o.p];
+          while (ops[x + 1] && ops[x + 1].add && ops[x + 1].p.fs && ((ops[x + 1].p.fs.kind === "side" && ops[x + 1].p.fs.grp === fs.grp) || ops[x + 1].p.fs.kind === "sub")) run.push(ops[++x].p);
+          let first = true;
+          const add = run.map(q => {
+            if (q.fs.kind === "sub") return { t: `・${q.text}`, id: newId() };
+            const t = `< ${q.text}${first && fs.target ? ` > ${fs.target}` : ""}`;
+            first = false;
+            return { t, id: newId() };
+          });
+          insertAt(rows, slot1, add);
+          slot1 = { after: add[add.length - 1].id }; slot2 = null; counts.add += run.length;
+          continue;
+        }
         counts.add++;
         const id = newId();
         if (o.p.depth === 2 && slot2) { insertAt(rows, { after: slot2 }, [{ t: `・${o.p.text}`, id }]); slot2 = id; if (slot1.newStep) slot1 = { after: id, newStep: true }; }
@@ -3119,6 +3223,7 @@ function exportToFlow() {
       if (f.unit !== null) slot1 = { after: lineIds[unitEnd(f.unit)] };
       slot2 = f.kind === "step" || f.kind === "sub" ? f.id : null;
     }
+    placeNotes(rows, notesToAdd, PA, slot1);
     for (const [id, sg] of segs) {
       const parts = sg.parts.filter(Boolean), x = rowAt(rows, id);
       if (!parts.length) { drop.add(id); continue; }
@@ -3145,11 +3250,11 @@ function importFlow(silent) {
     if (clean(r.name) || !g) { g = { head: r, rest: [] }; groups.push(g); if (clean(r.name) && !byKey.has(itemKey(r.name))) byKey.set(itemKey(r.name), g); }
     else g.rest.push(r);
   });
-  const used = new Set(), rows = [];
-  names.forEach(nm => {
+  const used = new Set(), rows = [], shapes = flowItems().map(it => it.shape);
+  names.forEach((nm, x) => {
     const hit = byKey.get(itemKey(nm));
-    if (hit && !used.has(hit)) { used.add(hit); rows.push(Object.assign(hit.head, { name: nm }), ...hit.rest); }
-    else rows.push(newRow({ name: nm }));
+    if (hit && !used.has(hit)) { used.add(hit); rows.push(Object.assign(hit.head, { name: nm, fs: shapes[x] }), ...hit.rest); }
+    else rows.push(newRow({ name: nm, fs: shapes[x] }));
   });
   const hasData = r => ["s", "e", "d", "cs", "ce", "cd"].some(k => clean(r[k]));
   const lost = groups.filter(x => !used.has(x) && [x.head, ...x.rest].some(hasData)).length;
