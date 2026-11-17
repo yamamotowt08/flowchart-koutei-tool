@@ -127,6 +127,8 @@ textarea#src { display: block; width: 100%; height: 360px; resize: vertical; bor
 .paper .wire { touch-action: none; }
 .paper .end { cursor: crosshair; touch-action: none; }
 .paper .end:hover, .paper .end.on { fill-opacity: .55; }
+.paper .sub { cursor: ns-resize; }
+.paper .sub.moving { opacity: .75; }
 .paper .node.drop .shape { stroke: #E0752D; stroke-width: 3; }
 .paper .wire:hover { stroke-opacity: .12; }
 .paper .dot:hover circle:last-child { r: 4.5; }
@@ -1062,7 +1064,9 @@ function svgOf(L, st, forImage) {
       for (const ln of L.lines) if (ln.type === "sub" && ln.owner === n) {
         out.push(`<path d="M${f1(ln.S[0])},${f1(ln.S[1])} L${f1(ln.E[0])},${f1(ln.E[1])}" stroke="${c(st.arrow)}" stroke-width="${st.lineW}" marker-end="url(#ah)"/>`);
       }
-      for (const b of n.subBoxes) { out.push(svgRect(b, st.sub[0], st.sub[1], st.lineW)); out.push(svgText(b, st.text, "l")); }
+      n.subBoxes.forEach((b, j) => {
+        out.push(`<g class="sub" data-sub="${j}" data-line="${b.line}">${svgRect(b, st.sub[0], st.sub[1], st.lineW)}${svgText(b, st.text, "l")}</g>`);
+      });
     } else {
       const [fill, line] = st[n.look];
       const x = n.x - n.w / 2, y = topOf(n);
@@ -1883,6 +1887,76 @@ function reorderByDrag(key) {
   return true;
 }
 
+// 行 from を、行 at の前に動かす（見えない行の番号も一緒に動かす）
+function moveLine(from, at) {
+  const lines = ta.value.split("\n");
+  const [ln] = lines.splice(from, 1), [id] = lineIds.splice(from, 1);
+  if (at > from) at--;
+  lines.splice(at, 0, ln);
+  lineIds.splice(at, 0, id);
+  prevLines = lines;
+  ta.value = lines.join("\n");
+}
+
+// 小項目を上下にドラッグしたら、同じ手順の中で並べ替える（手順の欄の「・」の行も動かす）
+function reorderSub(node, j, dy) {
+  const subs = node.subs, boxes = node.subBoxes;
+  const y = boxes[j].y + dy;
+  let to = 0;
+  boxes.forEach((b, k) => { if (k !== j && b.y < y) to++; });
+  if (to === j) return false;
+  const others = subs.filter((_, k) => k !== j);
+  moveLine(subs[j].line, to < others.length ? others[to].line : others[others.length - 1].line + 1);
+  update();
+  commit();
+  toast(`小項目「${subs[j].text}」を ${to + 1} 番目に並べ替えました（手順の欄も同じ順番です）。`, "元に戻す", undo);
+  return true;
+}
+
+// 照査・打合せの箱を別の場所に動かしたら、手順の欄の「@」の行もそこへ動かす
+function moveNoteByDrag(key) {
+  const { g, L, lineInfo } = state;
+  const note = L.notes.find(n => n.key === key);
+  if (!note) return false;
+  const units = g.units, nodeOf = i => L.nodes[g.entry[i]];
+  // 置ける場所：見出しの横（小項目があるとき）、小項目の間、手順のあと
+  const slots = [];
+  units.forEach((u, i) => {
+    const n = nodeOf(i), k = hasSubs(n) ? n.subs.length : 0;
+    if (k) {
+      slots.push({ unit: i, pos: 0, y: n.head.y });
+      for (let j = 1; j < k; j++) slots.push({ unit: i, pos: j, y: (bottomOf(n.subBoxes[j - 1]) + topOf(n.subBoxes[j])) / 2 });
+    }
+    const ex = L.nodes[g.exit[i]], next = i + 1 < units.length ? nodeOf(i + 1) : null;
+    slots.push({ unit: i, pos: k, y: next ? (bottomOf(ex) + topOf(next)) / 2 : bottomOf(ex) + 10 });
+  });
+  if (!slots.length) return false;
+  const best = slots.reduce((a, b) => (Math.abs(b.y - note.y) < Math.abs(a.y - note.y) ? b : a));
+  const cur = nodeOf(note.unit), k0 = hasSubs(cur) ? cur.subs.length : 0;
+  if (best.unit === note.unit && best.pos === Math.min(note.pos, k0)) return false;
+
+  // 入れる行：見出しのすぐ下／(pos-1) 番目の小項目のすぐ下／その手順のかたまりの最後
+  const u = units[best.unit], lines = ta.value.split("\n");
+  let at;
+  if (best.pos === 0 && hasSubs(nodeOf(best.unit))) at = u.line + 1;
+  else if (best.pos < (nodeOf(best.unit).subs || []).length) at = u.subs[best.pos - 1].line + 1;
+  else {
+    at = u.line;
+    while (at + 1 < lines.length && lineInfo[at + 1] && (["sub", "memo", "side"].includes(lineInfo[at + 1].type) || (lineInfo[at + 1].type === "lane" && !lineInfo[at + 1].n))) at++;
+    at++;
+  }
+  const from = note.line, uid = lineIds[from], label = clean(lines[from].replace(NOTE_RE, ""));
+  if (at === from || at === from + 1) return false;
+  moveLine(from, at);
+  // 新しい場所の並びに任せる（手で動かした分は消す）
+  for (const k of Object.keys(offsets)) if (k.startsWith(`${uid}|n`) || k === `●${uid}` || k.startsWith(`●${uid}|`)) delete offsets[k];
+  update();
+  commit();
+  const where = best.pos === 0 && hasSubs(nodeOf(best.unit)) ? "の見出しの横" : best.pos < (nodeOf(best.unit).subs || []).length ? `の小項目 ${best.pos} と ${best.pos + 1} の間` : "のあと";
+  toast(`「${label}」を「${units[best.unit].text || "同時進行"}」${where}に動かしました（手順の欄の @ の行も動かしました）。`, "元に戻す", undo);
+  return true;
+}
+
 // 一番近い矢印・図形のふちの上の点
 function snapPoint(p, segs) {
   let best = null, bd = Infinity;
@@ -1897,6 +1971,14 @@ function snapPoint(p, segs) {
 paper.addEventListener("pointerdown", e => {
   const endEl = e.target.closest(".end");
   if (endEl && e.button === 0) { startEndDrag(endEl, e); return; }
+  // 小項目は 1 つずつつかんで、同じ手順の中で上下に並べ替える
+  const subEl = e.target.closest(".sub");
+  if (subEl && e.button === 0) {
+    const n = state.L.nodes[+subEl.closest(".node").dataset.i];
+    drag = { sub: true, node: n, j: +subEl.dataset.sub, el: subEl, line: +subEl.dataset.line, key: n.key, start: svgPoint(e), moved: false, dy: 0 };
+    e.preventDefault();
+    return;
+  }
   const dotEl = e.target.closest(".dot"), wireEl = e.target.closest(".wire");
   const el = dotEl || e.target.closest(".node") || wireEl;
   if (!el && e.button === 0 && zoom > 1) { startPan(e); return; }
@@ -1907,7 +1989,7 @@ paper.addEventListener("pointerdown", e => {
   drag = {
     key: n.key, line: el.dataset.line !== undefined ? +el.dataset.line : -1, start: svgPoint(e),
     base: (offsets[n.key] || [0, 0]).slice(), moved: false, dot: dotEl ? n : null, route: el === wireEl ? n.route : null,
-    wire: el === wireEl, x: e.clientX, y: e.clientY,
+    wire: el === wireEl, x: e.clientX, y: e.clientY, isNote: el.dataset.note !== undefined,
     box: !dotEl && el !== wireEl ? boxInfo(n) : null,
   };
   e.preventDefault();
@@ -1920,6 +2002,14 @@ window.addEventListener("pointermove", e => {
   if (!drag.moved && Math.hypot(dx, dy) < 3) return;
   drag.moved = true;
   paper.classList.add("dragging");
+  if (drag.sub) {
+    // 同じ手順の枠の中だけ上下に動く（離したときに並べ替える）
+    const n = drag.node, b = n.subBoxes[drag.j];
+    drag.dy = Math.max(topOf(n.subBoxes[0]) - topOf(b) - b.h / 2, Math.min(bottomOf(n.subBoxes[n.subBoxes.length - 1]) - bottomOf(b) + b.h / 2, dy));
+    drag.el.setAttribute("transform", `translate(0 ${f1(drag.dy)})`);
+    drag.el.classList.add("moving");
+    return;
+  }
   if (drag.dot) {
     // 点は矢印や図形のふちの近くに来たら吸い付く
     const d = drag.dot, q = snapPoint([d.x0 + drag.base[0] + dx, d.y0 + drag.base[1] + dy], state.L.snap);
@@ -1967,6 +2057,12 @@ window.addEventListener("pointerup", e => {
   drag = null;
   paper.classList.remove("dragging");
   if (dragGuides) { dragGuides = null; update(); }
+  if (d.sub) {
+    if (!d.moved) selectLine(d.line);
+    else if (!reorderSub(d.node, d.j, d.dy)) update();
+    return;
+  }
+  if (d.moved && d.isNote && moveNoteByDrag(d.key)) return;
   if (d.moved && !d.dot && !d.wire && d.box && reorderByDrag(d.key)) return;
   if (d.moved) commit();
   else if (d.wire) showLinePop(d.key, d.x, d.y);
