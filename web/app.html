@@ -3144,6 +3144,7 @@ function exportToFlow() {
   commit();
 
   const { g, lineInfo } = state, units = g.units;
+  const blank = !units.length;   // 白紙のフローチャートへの反映（業務フロー（Word の例）と同じ形にする）
   const firstUnit = F.find(f => f.unit !== null);
   const lastWork = [...units.keys()].reverse().find(u => !(units[u].kind !== "block" && units[u].isEnd));
   const endUnit = units.findIndex(u => u.kind !== "block" && u.isEnd);
@@ -3230,7 +3231,13 @@ function exportToFlow() {
       rows[x].t = sg.kind === "lane" ? `| ${parts.join(" → ")}` : `< ${parts.join(" → ")}${sg.tail ? ` ${sg.tail}` : ""}`;
     }
     for (let x = rows.length - 1; x >= 0; x--) if (drop.has(rows[x].id)) rows.splice(x, 1);
+    if (blank) {
+      // 空の行を消して、最後に「業務納品」を付ける
+      for (let x = rows.length - 1; x >= 0; x--) if (!clean(rows[x].t)) rows.splice(x, 1);
+      rows.push({ t: "業務納品", id: newId() });
+    }
   });
+  if (blank) { $("optSize").value = "a4p"; $("optStyle").value = "gyomu"; }   // A4 縦・業務フロー（黄色）
   update();
   sched.ignoreSync = "";
   planUpdate();
