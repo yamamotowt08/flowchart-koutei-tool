@@ -1,0 +1,2897 @@
+<title>フローチャート・工程表作成</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=BIZ+UDGothic&family=BIZ+UDPGothic:wght@400;700&family=Zen+Kaku+Gothic+New:wght@500;700&display=swap">
+<style>
+/* 作業台：左に「手順書」、右は方眼の上に置いたスライド用紙 */
+:root {
+  --desk: #E8EDEB;
+  --panel: #FBFCFB;
+  --ink: #1E2A2D;
+  --muted: #5B696D;
+  --rule: #D0D9D6;
+  --accent: #1D6A84;
+  --accent-ink: #FFFFFF;
+  --accent-soft: #DAEAEF;
+  --grid: rgba(29, 106, 132, .08);
+  --warn: #A3460F;
+  --paper: #FFFFFF;
+  --shadow: rgba(20, 40, 45, .14);
+  --chg: #B3261E;
+  --chg-soft: #FCEBDC;
+  --warn-soft: #FBE7DC;
+  --f-display: "Zen Kaku Gothic New", "Yu Gothic UI", "Meiryo UI", sans-serif;
+  --f-body: "BIZ UDPGothic", "Meiryo UI", "Yu Gothic UI", "Hiragino Sans", sans-serif;
+  --f-mono: "BIZ UDGothic", "MS Gothic", "Osaka-Mono", monospace;
+  --lh-edit: 26px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --desk: #111718; --panel: #192124; --ink: #E2E9E7; --muted: #93A2A5; --rule: #2B373A;
+    --accent: #66B6D1; --accent-ink: #0C181C; --accent-soft: #1C3440; --grid: rgba(102, 182, 209, .07);
+    --warn: #E79B66; --paper: #FFFFFF; --shadow: rgba(0, 0, 0, .45); color-scheme: dark;
+    --chg: #F08A7E; --chg-soft: #33261C; --warn-soft: #3A2419;
+  }
+}
+:root[data-theme="dark"] {
+  --desk: #111718; --panel: #192124; --ink: #E2E9E7; --muted: #93A2A5; --rule: #2B373A;
+  --accent: #66B6D1; --accent-ink: #0C181C; --accent-soft: #1C3440; --grid: rgba(102, 182, 209, .07);
+  --warn: #E79B66; --paper: #FFFFFF; --shadow: rgba(0, 0, 0, .45); color-scheme: dark;
+  --chg: #F08A7E; --chg-soft: #33261C; --warn-soft: #3A2419;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { margin: 0; }
+body { background: var(--desk); color: var(--ink); font: 14px/1.6 var(--f-body); }
+button, input, select, textarea { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.app { max-width: 1480px; margin: 0 auto; padding-inline: 16px; padding-block: 14px 28px; display: grid; gap: 14px; }
+
+.bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px 20px; }
+.brand { min-width: 0; }
+.brand h1 { margin: 0; font: 700 22px/1.25 var(--f-display); letter-spacing: .04em; text-wrap: balance; }
+.brand p { margin: 2px 0 0; color: var(--muted); font-size: 13px; }
+.actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.btn { border: 1px solid var(--rule); background: var(--panel); border-radius: 6px; padding: 8px 14px; cursor: pointer; font-weight: 700; }
+.btn:hover { border-color: var(--accent); }
+.btn:disabled { opacity: .45; cursor: default; border-color: var(--rule); }
+.btn.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); padding-inline: 18px; }
+.btn.primary:hover { filter: brightness(1.08); }
+.btn .key { font-weight: 400; opacity: .75; font-size: 12px; margin-left: 6px; }
+
+.bench { display: grid; grid-template-columns: minmax(0, 410px) minmax(0, 1fr); gap: 14px; align-items: start; }
+@media (max-width: 880px) { .bench { grid-template-columns: minmax(0, 1fr); } }
+
+.sheet { background: var(--panel); border: 1px solid var(--rule); border-radius: 8px; padding: 14px; display: grid; gap: 10px; min-width: 0; }
+.sheet-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.sheet-head h2 { margin: 0; font: 700 15px/1.3 var(--f-display); letter-spacing: .06em; }
+.sheet-head select { max-width: 100%; }
+select, input[type="text"], input[type="date"], input[type="number"], .fields textarea { background: var(--panel); border: 1px solid var(--rule); border-radius: 5px; padding: 5px 8px; min-width: 0; }
+
+.inserts { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { border: 1px solid var(--rule); background: var(--desk); border-radius: 999px; padding: 3px 11px; cursor: pointer; font-size: 13px; display: inline-flex; align-items: center; gap: 6px; }
+.chip:hover { border-color: var(--accent); background: var(--accent-soft); }
+.chip svg { width: 16px; height: 12px; flex: none; }
+.chip svg * { fill: none; stroke: currentColor; stroke-width: 1.3; }
+
+.editor { display: grid; grid-template-columns: 2.6em minmax(0, 1fr); border: 1px solid var(--rule); border-radius: 6px; overflow: hidden; background: var(--panel); }
+.gutter { background: var(--desk); border-right: 1px solid var(--rule); overflow: hidden; padding-block: 8px; font: 12px/var(--lh-edit) var(--f-mono); color: var(--muted); text-align: right; font-variant-numeric: tabular-nums; user-select: none; }
+.gutter div { height: var(--lh-edit); padding-right: 7px; white-space: nowrap; }
+.gutter .step { color: var(--accent); font-weight: 700; }
+.gutter .lane { color: var(--accent); }
+.gutter .err { color: var(--warn); }
+.gutter .err::before { content: "!"; margin-right: 3px; }
+textarea#src { display: block; width: 100%; height: 360px; resize: vertical; border: 0; outline: none; padding: 8px 10px; background: transparent; font: 14px/var(--lh-edit) var(--f-mono); white-space: pre; overflow: auto; tab-size: 2; }
+.editor:focus-within { border-color: var(--accent); }
+
+.msgs { display: grid; gap: 4px; font-size: 13px; min-height: 1em; }
+.msgs .m { display: flex; gap: 8px; align-items: baseline; }
+.msgs .m b { flex: none; font-variant-numeric: tabular-nums; }
+.msgs .warn { color: var(--warn); }
+.msgs .info { color: var(--muted); }
+
+.howto { border-top: 1px solid var(--rule); padding-top: 8px; }
+.howto summary { cursor: pointer; font-weight: 700; font-family: var(--f-display); letter-spacing: .04em; }
+.howto table { width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 13px; }
+.howto td { border-top: 1px solid var(--rule); padding: 5px 4px; vertical-align: top; }
+.howto td:first-child { font-family: var(--f-mono); white-space: nowrap; color: var(--accent); padding-right: 10px; }
+.howto .tbl { overflow-x: auto; }
+
+.stage { display: grid; gap: 10px; min-width: 0; }
+.opts { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; background: var(--panel); border: 1px solid var(--rule); border-radius: 8px; padding: 10px 14px; }
+.opts label { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); }
+.opts label.grow { flex: 1 1 200px; }
+.opts label.grow input { flex: 1; }
+
+.board { position: relative; border-radius: 8px; border: 1px solid var(--rule); overflow: hidden; }
+.scroller { overflow: auto; max-height: 78vh; padding: 22px; background-color: var(--desk);
+  background-image: linear-gradient(var(--grid) 1px, transparent 1px), linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+  background-size: 16px 16px; }
+.scroller.panning { cursor: grabbing; }
+.paper { background: var(--paper); box-shadow: 0 1px 2px var(--shadow), 0 8px 24px var(--shadow); margin: 0 auto; }
+.zoombar { position: absolute; top: 8px; right: 12px; z-index: 2; display: flex; align-items: center; gap: 2px; background: var(--panel); border: 1px solid var(--rule); border-radius: 6px; padding: 2px; box-shadow: 0 2px 8px var(--shadow); }
+.zoombar button { border: 0; background: none; border-radius: 4px; min-width: 30px; height: 28px; cursor: pointer; font-weight: 700; padding: 0 8px; }
+.zoombar button:hover { background: var(--accent-soft); }
+.linepop { position: absolute; z-index: 3; display: flex; align-items: center; gap: 4px; background: var(--panel); border: 1px solid var(--rule); border-radius: 8px; padding: 4px 6px; box-shadow: 0 4px 14px var(--shadow); font-size: 13px; }
+.linepop .lbl { color: var(--muted); padding: 0 4px; }
+.linepop button { border: 1px solid var(--rule); background: var(--panel); border-radius: 5px; padding: 3px 10px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
+.linepop button svg { width: 22px; height: 6px; }
+.linepop button svg line { stroke: currentColor; stroke-width: 2; }
+.linepop button[data-del] { color: var(--warn); }
+.linepop button.on { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.zoombar .pct { min-width: 3.4em; text-align: center; font-size: 12px; font-variant-numeric: tabular-nums; color: var(--muted); }
+.paper svg { display: block; width: 100%; height: auto; }
+.paper .node { cursor: grab; touch-action: none; }
+.paper .dot { cursor: move; touch-action: none; }
+.paper .wire { touch-action: none; }
+.paper .end { cursor: crosshair; touch-action: none; }
+.paper .end:hover, .paper .end.on { fill-opacity: .55; }
+.paper .node.drop .shape { stroke: #E0752D; stroke-width: 3; }
+.paper .wire:hover { stroke-opacity: .12; }
+.paper .dot:hover circle:last-child { r: 4.5; }
+.paper.dragging .node { cursor: grabbing; }
+.linkbtn { background: none; border: 0; padding: 0; color: var(--accent); text-decoration: underline; cursor: pointer; font-size: 13px; }
+.paper .node:hover .shape { stroke-width: 2.6; }
+.paper .node.cur .shape { stroke: #E0752D; stroke-width: 2.8; }
+.empty { fill: #8A979A; font-size: 16px; }
+.stats { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 6px 16px; font-size: 13px; color: var(--muted); }
+.stats .n { font-variant-numeric: tabular-nums; color: var(--ink); font-weight: 700; }
+
+.toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(18px + env(safe-area-inset-bottom, 0px)); background: var(--ink); color: var(--panel); padding: 10px 16px; border-radius: 8px; box-shadow: 0 6px 20px var(--shadow); display: flex; gap: 14px; align-items: center; max-width: calc(100% - 32px); z-index: 10; }
+.toast button { background: none; border: 0; color: inherit; text-decoration: underline; cursor: pointer; padding: 0; font-weight: 700; }
+/* 切り替え（フローチャート／工程表） */
+.tabs { display: flex; flex-wrap: wrap; gap: 6px; border-bottom: 1px solid var(--rule); }
+.tab { border: 1px solid transparent; border-bottom: 0; background: none; border-radius: 8px 8px 0 0; padding: 8px 18px; margin-bottom: -1px; cursor: pointer;
+  display: inline-flex; align-items: baseline; gap: 8px; color: var(--muted); font: 700 15px/1.3 var(--f-display); letter-spacing: .06em; }
+.tab .sub { font: 400 12px/1 var(--f-body); letter-spacing: 0; }
+.tab:hover { color: var(--ink); }
+.tab[aria-selected="true"] { background: var(--panel); border-color: var(--rule); color: var(--ink); }
+
+/* 工程表 */
+.plan { display: grid; gap: 14px; }
+.plan-cols { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; align-items: start; }
+@media (max-width: 880px) { .plan-cols { grid-template-columns: minmax(0, 1fr); } }
+.hint { margin: 0; color: var(--muted); font-size: 13px; }
+.sync { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 14px; background: var(--accent-soft); border-radius: 6px; padding: 7px 12px; font-size: 13px; }
+.tasks-wrap { overflow-x: auto; border: 1px solid var(--rule); border-radius: 6px; }
+table.tasks { border-collapse: collapse; width: 100%; min-width: 1240px; font-size: 13px; }
+.tasks th { background: var(--desk); padding: 4px 6px; text-align: left; font-weight: 700; white-space: nowrap; }
+.tasks thead tr:first-child th { font-family: var(--f-display); letter-spacing: .04em; text-align: center; }
+.tasks thead tr:last-child th { border-bottom: 1px solid var(--rule); }
+.tasks th.chg, .tasks td.chg { background: var(--chg-soft); }
+.tasks td { padding: 3px 4px; border-top: 1px solid var(--rule); vertical-align: middle; }
+.tasks td.no { color: var(--muted); font: 12px var(--f-mono); text-align: right; padding-right: 6px; width: 2.4em; }
+.tasks input, .tasks select { width: 100%; padding: 4px 6px; }
+.tasks input[type="date"] { min-width: 9em; }
+.tasks input[type="number"] { min-width: 4.4em; }
+.tasks td.name { min-width: 15em; }
+.tasks tr.cont td.name input { margin-left: 1.4em; width: calc(100% - 1.4em); }
+.tasks tr.cont td.name input::placeholder { color: var(--muted); }
+.tasks tr.bad td { background: var(--warn-soft); }
+.tasks td.res { font-size: 12px; color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; line-height: 1.35; }
+.tasks td.res .c { color: var(--chg); }
+.tasks select.swatch { border-left-width: 8px; }
+.ops { white-space: nowrap; }
+.ops button { border: 1px solid var(--rule); background: var(--panel); border-radius: 4px; padding: 2px 7px; cursor: pointer; font-size: 12px; }
+.ops button:hover { border-color: var(--accent); }
+.ops button[data-act="del"] { color: var(--warn); }
+.fields { display: grid; grid-template-columns: minmax(0, 10em) minmax(0, 1fr); gap: 6px 10px; align-items: center; font-size: 13px; }
+.fields > label { color: var(--muted); }
+.fields input, .fields select, .fields textarea { width: 100%; }
+.fields textarea { resize: vertical; min-height: 4.2em; font: 13px/1.5 var(--f-mono); }
+.fields .note { grid-column: 2; margin-top: -3px; font-size: 12px; color: var(--muted); }
+.fields input[type="color"] { width: 4em; height: 30px; padding: 2px; border: 1px solid var(--rule); border-radius: 5px; background: var(--panel); }
+.holidays { font-size: 12px; color: var(--muted); }
+.holidays summary { cursor: pointer; }
+.gpaper { min-width: 780px; }
+.gpaper svg { display: block; width: 100%; height: auto; }
+@media (prefers-reduced-motion: no-preference) { .toast { animation: rise .18s ease-out; } @keyframes rise { from { transform: translate(-50%, 8px); opacity: .4; } } }
+</style>
+
+<div class="app">
+  <header class="bar">
+    <div class="brand">
+      <h1>フローチャート・工程表作成</h1>
+      <p id="lead">手順を書くと、その場で図ができます。PowerPoint の図形のまま保存できます。</p>
+    </div>
+    <div class="actions">
+      <button id="btnUndo" class="btn" type="button" title="元に戻す（Ctrl+Z）" disabled>↶ 元に戻す</button>
+      <button id="btnRedo" class="btn" type="button" title="やり直す（Ctrl+Y）" disabled>↷ やり直す</button>
+      <button id="btnData" class="btn" type="button" title="手順・工程表の入力をまとめて 1 つのファイルに保存します">入力を保存</button>
+      <button id="btnOpen" class="btn" type="button" title="「入力を保存」で作ったファイルを開きます">入力を開く</button>
+      <input id="fileOpen" type="file" accept=".json,application/json" hidden>
+      <button id="btnCopy" class="btn" type="button">画像をコピー</button>
+      <button id="btnSave" class="btn primary" type="button">PowerPoint で保存<span class="key">Ctrl+S</span></button>
+      <button id="btnXlsx" class="btn primary" type="button" hidden>Excel で保存<span class="key">Ctrl+S</span></button>
+    </div>
+  </header>
+
+  <nav class="tabs" role="tablist" aria-label="作るもの">
+    <button id="tabFlow" class="tab" type="button" role="tab" aria-selected="true" aria-controls="flowView">フローチャート<span class="sub">→ PowerPoint</span></button>
+    <button id="tabPlan" class="tab" type="button" role="tab" aria-selected="false" aria-controls="planView">工程表<span class="sub">→ Excel</span></button>
+  </nav>
+
+  <main class="bench" id="flowView" role="tabpanel" aria-labelledby="tabFlow">
+    <section class="sheet" aria-labelledby="hSteps">
+      <div class="sheet-head">
+        <h2 id="hSteps">手順</h2>
+        <select id="sample" aria-label="サンプルを入れる">
+          <option value="">サンプルを入れる…</option>
+          <option value="word">業務フロー（Word の例）</option>
+          <option value="gyomu">業務の流れ（例）</option>
+          <option value="shinsei">申請と承認（例）</option>
+          <option value="chumon">注文の受付（例）</option>
+        </select>
+      </div>
+
+      <div class="inserts" role="toolbar" aria-label="行を追加">
+        <button class="chip" type="button" data-ins="start"><svg viewBox="0 0 16 12"><rect x="1" y="2" width="14" height="8" rx="4"/></svg>開始</button>
+        <button class="chip" type="button" data-ins="proc"><svg viewBox="0 0 16 12"><rect x="1" y="2" width="14" height="8"/></svg>処理</button>
+        <button class="chip" type="button" data-ins="sub"><svg viewBox="0 0 16 12"><rect x="1" y="1" width="14" height="10"/><rect x="3.5" y="5" width="9" height="4"/></svg>小項目</button>
+        <button class="chip" type="button" data-ins="memo"><svg viewBox="0 0 16 12"><circle cx="3" cy="6" r="1.6"/><path d="M5 6H9"/><rect x="9.5" y="3" width="6" height="6"/></svg>照査・打合せ</button>
+        <button class="chip" type="button" data-ins="meet"><svg viewBox="0 0 16 12"><circle cx="3" cy="6" r="1.6"/><path d="M5 6H9"/><rect x="9.5" y="3" width="6" height="6"/></svg>打合せ</button>
+        <button class="chip" type="button" data-ins="side"><svg viewBox="0 0 16 12"><path d="M14 1V11M14 3H4V8"/><rect x="1" y="8" width="6" height="3.5"/></svg>並行（左）</button>
+        <button class="chip" type="button" data-ins="end"><svg viewBox="0 0 16 12"><rect x="1" y="2" width="14" height="8" rx="4"/></svg>終了</button>
+      </div>
+
+      <div class="editor">
+        <div class="gutter" id="gutter" aria-hidden="true"></div>
+        <textarea id="src" wrap="off" spellcheck="false" aria-label="手順（1 行に 1 つ）"></textarea>
+      </div>
+      <div id="msgs" class="msgs" aria-live="polite"></div>
+
+      <details class="howto" id="howto">
+        <summary>書き方</summary>
+        <div class="tbl">
+          <table>
+            <tr><td>開始 / 終了</td><td>角丸（開始・終了）。「完了」「スタート」なども可</td></tr>
+            <tr><td>在庫はある？</td><td>「？」で終わる行はひし形（判断）</td></tr>
+            <tr><td>書類を作る</td><td>それ以外は四角（処理）</td></tr>
+            <tr><td>判断？ &gt; 処理</td><td>「いいえ」のとき右に処理。そのあと元の流れ（次の手順）に戻る</td></tr>
+            <tr><td>判断？ &gt; 処理 &gt; 戻らない</td><td>処理のあと元の流れに戻らない（そこで終わる）。「×」でも可</td></tr>
+            <tr><td>判断？ &gt; 処理 &gt; 戻る</td><td>処理のあと次の手順に戻る（書かなくても同じ）</td></tr>
+            <tr><td>判断？ &gt; 処理 &gt; #2</td><td>処理のあと 2 番目の手順へ戻る（番号は左の青い数字）</td></tr>
+            <tr><td>判断？ &gt; #5</td><td>「いいえ」のとき 5 番目の手順へ</td></tr>
+            <tr><td>判断？ &gt; 終了</td><td>「いいえ」のとき右に終了</td></tr>
+            <tr><td>| 作業A → 作業B<br>| 作業C</td><td>「|」で始まる行が続くと同時進行（1 行が 1 列）。→ で同じ列の次の作業。前後は二重線で分かれて合流します</td></tr>
+            <tr><td>・小項目</td><td>すぐ上の手順の中に小さな箱で入る（例：・基礎工の検討）</td></tr>
+            <tr><td>@照査、打合せ</td><td>右に照査・打合せの箱を付ける。手順の見出しのすぐ下なら見出しの横、小項目の間ならその間、最後なら次の手順との間に付きます</td></tr>
+            <tr><td>&lt; 作業 &gt; 図面作成</td><td>すぐ上の手順と並行して左で進み、「図面作成」の前で本線に合流（破線）。「&gt; #9」のように番号でも可。下に「・」で小項目も書けます</td></tr>
+            <tr><td>※ メモ</td><td>図には出ません</td></tr>
+            <tr><td>○ / ◇ / □</td><td>行の先頭に付けて空白を入れると形を指定（例：○ 受付完了）</td></tr>
+          </table>
+        </div>
+      </details>
+    </section>
+
+    <section class="stage" aria-label="プレビュー">
+      <div class="opts">
+        <label>スライド
+          <select id="optSize">
+            <option value="w169">16:9</option>
+            <option value="s43">4:3</option>
+            <option value="a4p">A4 縦</option>
+            <option value="a4l">A4 横</option>
+          </select>
+        </label>
+        <label>色
+          <select id="optStyle">
+            <option value="gyomu">業務フロー（黄色）</option>
+            <option value="color">カラー</option>
+            <option value="mono">白黒（資料向け）</option>
+          </select>
+        </label>
+        <label>形
+          <select id="optShape">
+            <option value="same">そろえる（すべて四角）</option>
+            <option value="kind">種類で変える（○◇□）</option>
+          </select>
+        </label>
+        <label>文字
+          <select id="optFont">
+            <option value="meiryoui">Meiryo UI</option>
+            <option value="meiryo">メイリオ</option>
+            <option value="bizud">BIZ UDPゴシック</option>
+            <option value="mspg">ＭＳ Ｐゴシック</option>
+            <option value="yu">游ゴシック</option>
+          </select>
+        </label>
+        <label class="grow">タイトル <input id="optTitle" type="text" placeholder="なしでも大丈夫です"></label>
+      </div>
+      <div class="board">
+        <div class="zoombar" role="toolbar" aria-label="ズーム">
+          <button id="zOut" type="button" title="小さく">－</button>
+          <span id="zPct" class="pct">100%</span>
+          <button id="zIn" type="button" title="大きく">＋</button>
+          <button id="zFit" type="button" title="全体を表示">全体</button>
+        </div>
+        <div class="linepop" id="linePop" role="toolbar" aria-label="線の種類" hidden>
+          <span class="lbl">線</span>
+          <button type="button" data-ls="solid"><svg viewBox="0 0 22 6"><line x1="0" y1="3" x2="22" y2="3"/></svg>実線</button>
+          <button type="button" data-ls="dashed"><svg viewBox="0 0 22 6"><line x1="0" y1="3" x2="22" y2="3" stroke-dasharray="4 3"/></svg>点線</button>
+          <button type="button" data-del title="この線を消す（Delete）">消す</button>
+        </div>
+        <div class="scroller" id="scroller"><div class="paper" id="paper"></div></div>
+      </div>
+      <div class="stats">
+        <span id="stats"></span>
+        <span>図形・黒い点・折れ曲がった線はドラッグで動かせます。矢印のはしをつかんで別の箱で離すとつなぎ先が変わり、何もない所で離すとそこまで伸びます。箱を動かすと上下の箱や縦の線にそろって補助線が出ます。箱をクリックして Delete キーで、その手順を消せます。線をクリックすると実線・点線を選んだり消したりでき、まっすぐな矢印はドラッグで横にずらせます　<button id="btnReset" class="linkbtn" type="button" hidden>配置を元に戻す</button> <button id="btnShowLines" class="linkbtn" type="button" hidden>消した線を戻す</button></span>
+      </div>
+    </section>
+  </main>
+
+  <main class="plan" id="planView" role="tabpanel" aria-labelledby="tabPlan" hidden>
+    <section class="sheet" aria-labelledby="hTasks">
+      <div class="sheet-head">
+        <h2 id="hTasks">作業と日程</h2>
+        <div class="actions">
+          <button id="btnImport" class="btn" type="button" title="フローチャートの手順・小項目・照査・打合せを作業項目にします（入れた日付は残ります）">フローチャートの手順を取り込む</button>
+          <select id="planSample" aria-label="サンプルを入れる">
+            <option value="">サンプルを入れる…</option>
+            <option value="koutei">詳細検討業務（Excel の例）</option>
+          </select>
+        </div>
+      </div>
+      <div id="syncNote" class="sync" hidden>
+        <span>フローチャートの手順と、工程表の作業項目がちがいます。</span>
+        <button id="btnImport2" class="linkbtn" type="button">手順を取り込み直す</button>
+        <button id="btnSyncIgnore" class="linkbtn" type="button">このままにする</button>
+      </div>
+      <p class="hint">開始日・終了日・日数のうち 2 つ、または日数だけを入れます（日数だけのときは上の作業の翌日から）。日付が変わったときは「変更後」に入れると、変更前のバーの下に変更後のバーが付きます。「＋期間」で同じ作業に別の期間（2 回目の照査など）を足せます。</p>
+      <div class="tasks-wrap">
+        <table class="tasks" id="tasks">
+          <thead>
+            <tr><th colspan="2"></th><th colspan="3">変更前（当初の予定）</th><th colspan="3" class="chg">変更後（日付が変わったときだけ）</th><th colspan="4"></th></tr>
+            <tr><th></th><th>作業項目</th><th>開始日</th><th>終了日</th><th>日数</th><th class="chg">開始日</th><th class="chg">終了日</th><th class="chg">日数</th><th>バー色</th><th>備考</th><th>計算結果</th><th></th></tr>
+          </thead>
+          <tbody id="taskRows"></tbody>
+        </table>
+      </div>
+      <div class="inserts">
+        <button id="btnAddRow" class="chip" type="button">＋ 作業を追加</button>
+      </div>
+      <div id="planMsgs" class="msgs" aria-live="polite"></div>
+    </section>
+
+    <section class="stage" aria-label="工程表のプレビュー">
+      <div class="board">
+        <div class="scroller" id="gScroller"><div class="paper gpaper" id="gPaper"></div></div>
+      </div>
+      <div class="stats"><span id="gStats"></span><span>Excel で開くと、表もバーもそのまま直せます（バーは図形です）。印刷は A4 横 1 ページ幅に合わせてあります。</span></div>
+    </section>
+
+    <div class="plan-cols">
+      <section class="sheet" aria-labelledby="hHead">
+        <div class="sheet-head"><h2 id="hHead">工程表の見出し</h2></div>
+        <div class="fields" id="headFields"></div>
+      </section>
+      <section class="sheet" aria-labelledby="hCfg">
+        <div class="sheet-head"><h2 id="hCfg">設定</h2></div>
+        <div class="fields" id="cfgFields"></div>
+      </section>
+    </div>
+  </main>
+</div>
+<div id="toast" class="toast" role="status" hidden></div>
+
+<script>
+"use strict";
+const TEMPLATE = __PPTX_TEMPLATE__;
+
+// ---------- 設定 ----------
+const SIZES = { w169: [960, 540], s43: [720, 540], a4p: [540, 780], a4l: [780, 540] };
+// head=小項目つきの見出し / body=小項目の外枠 / sub=小項目 / notes=照査・打合せなど
+const STYLES = {
+  gyomu: { proc: ["FFFF99", "000000"], term: ["FFFF99", "000000"], dec: ["FFFF99", "000000"], text: "000000", arrow: "000000", lineW: 1,
+           head: "FFFF99", body: "FFFFFF", sub: ["FFFFFF", "000000"], notes: { check: "CCFFFF", meet: "FF99CC", other: "F2F2F2" } },
+  color: { proc: ["DEEBF7", "2E75B6"], term: ["E2EFDA", "548235"], dec: ["FFF2CC", "BF9000"], text: "262626", arrow: "595959", lineW: 1.5,
+           head: "DEEBF7", body: "FFFFFF", sub: ["FFFFFF", "2E75B6"], notes: { check: "DDF2F7", meet: "FBE3EC", other: "F2F2F2" } },
+  mono:  { proc: ["FFFFFF", "000000"], term: ["FFFFFF", "000000"], dec: ["FFFFFF", "000000"], text: "000000", arrow: "000000", lineW: 1,
+           head: "FFFFFF", body: "FFFFFF", sub: ["FFFFFF", "000000"], notes: { check: "FFFFFF", meet: "FFFFFF", other: "FFFFFF" } },
+};
+const FONTS = {
+  meiryoui: ["Meiryo UI", '"Meiryo UI", Meiryo, "BIZ UDPGothic", sans-serif'],
+  meiryo:   ["メイリオ", 'Meiryo, "メイリオ", "BIZ UDPGothic", sans-serif'],
+  bizud:    ["BIZ UDPゴシック", '"BIZ UDPGothic", "BIZ UDPゴシック", sans-serif'],
+  mspg:     ["ＭＳ Ｐゴシック", '"MS PGothic", "ＭＳ Ｐゴシック", "BIZ UDPGothic", sans-serif'],
+  yu:       ["游ゴシック", '"Yu Gothic", "游ゴシック", YuGothic, "BIZ UDPGothic", sans-serif'],
+};
+const LH = 1.25;
+const START_WORDS = ["開始", "スタート", "START", "BEGIN", "はじめ", "始め", "始まり"];
+const END_WORDS = ["終了", "終わり", "おわり", "完了", "END", "STOP", "エンド", "ゴール", "業務納品", "納品"];
+// 「いいえ」の処理のあと、元の流れに戻るか戻らないか
+const BACK_WORDS = ["戻る", "もどる", "合流"];
+const STAY_WORDS = ["戻らない", "もどらない", "合流しない", "×", "✕"];
+const NO_LINE_START = "、。，．）」』】〕！？!?・ーぁぃぅぇぉっゃゅょァィゥェォッャュョ";
+
+const SAMPLES = {
+  word: "※ 例：業務フロー（Word の例をもとにしています）\n設計計画\n@照査、打合せ\n現地踏査\n基本事項の検討\n@打合せ\n・あああああ\n@打合せ\n・いいいいい\n@打合せ\n・構造物との取付検討\n@打合せ\n組み合わせ検討\n本体設計\n・基礎工検討諸元の整理\n・安定計算\n< ○○対策設計 > 図面作成\n・洗掘防止対策の検討\n・対策設計\n・河道断面の計算\n付帯施設設計\n・階段\n@照査、打合せ\n施工計画\n・施工計画、仮設計画\n図面作成\n・図面作成\n数量計算\n報告書作成\n@照査、打合せ\n業務納品",
+  gyomu: "※ 例：調査業務の流れ（自由に書き換えてください）\n開始\n打合せ\n| 現地踏査 → 写真・データ整理\n| 既存資料の収集 → 資料整理\n| 関係機関への照会\n図面・資料作成\n社内照査はOK？ > 修正する > #4\n発注者協議\n協議で了承された？ > 修正対応 > #4\n報告書提出\n終了",
+  shinsei: "※ 例：申請と承認\n開始\n申請書を書く\n内容は正しい？ > 書き直す > #2\n上司の承認は得た？ > 差し戻し対応 > 再申請する > #2\n予算内？ > 終了\n発注する\n納品を確認する\n終了",
+  chumon: "※ 例：注文の受付\n開始\n注文を受け付ける\n会員登録済み？ > 会員登録をしてもらう\n在庫はある？ > 取り寄せる > #4\n商品を発送する\n終了",
+};
+
+// ---------- 読み取り ----------
+const clean = s => s.replace(/^[\s　]+|[\s　]+$/g, "");
+const toHalf = s => s.replace(/[０-９]/g, c => String.fromCharCode(c.charCodeAt(0) - 0xFEE0));
+function isWord(t, list) {
+  t = clean(t).toUpperCase().replace(/[。.!！]+$/, "");
+  return t !== "" && list.includes(t);
+}
+function classify(raw) {
+  let t = clean(raw), kind = "proc", forced = false;
+  // 形の指定は「○ 受付完了」のように記号のあとに空白があるときだけ（「○○対策」はそのまま）
+  const f = /^[○◯◇◆□■][\s　]/.test(t) ? t.charAt(0) : "";
+  if (f && "○◯".includes(f)) { kind = "term"; forced = true; }
+  else if (f && "◇◆".includes(f)) { kind = "dec"; forced = true; }
+  else if (f && "□■".includes(f)) { forced = true; }
+  if (forced) t = clean(t.slice(1));
+  else if (/[？?]$/.test(t)) kind = "dec";
+  else if (isWord(t, START_WORDS) || isWord(t, END_WORDS)) kind = "term";
+  return { text: t, kind, isEnd: kind === "term" && isWord(t, END_WORDS) };
+}
+
+const LANE_RE = /^[|｜]\s*/;          // 同時進行の列（1 行が 1 列、→ で同じ列の次の作業）
+const SUB_RE = /^[・･\-*]\s*/;         // 小項目（直前の手順の中に入る）
+const SIDE_RE = /^[<＜]\s*/;          // 左に並行して進む手順（> で合流先）
+const NOTE_RE = /^[@＠]\s*/;          // 照査・打合せなど（右に付く）
+const NUM_RE = /^[0-9０-９]+[.．)）、:：](?![0-9０-９])\s*/;
+const SUBNUM_RE = /^[（(][0-9０-９]+[)）]\s*/;
+
+function parse(src, autoNum, ids) {
+  const idOf = i => (ids && ids[i]) || `L${i}`;
+  const lines = src.replace(/\r\n?/g, "\n").split("\n");
+  const units = [], sides = [], lineInfo = [];
+  let block = null, side = null, lastMain = null, lastStep = null;
+  // 手順（黄色い箱）には番号を付けない。手で書いた番号はそのまま出す
+  const stepText = t => t;
+  const subText = t => (autoNum ? clean(t.replace(SUBNUM_RE, "").replace(NUM_RE, "")) : t);
+
+  lines.forEach((ln, i) => {
+    let s = clean(ln);
+    if (!s) { lineInfo.push({ type: "blank" }); return; }
+    if (/^(※|'|\/\/)/.test(s)) { lineInfo.push({ type: "note" }); return; }
+
+    if (NOTE_RE.test(s)) {
+      const items = s.replace(NOTE_RE, "").split(/[、,，・\/／]/).map(clean).filter(Boolean);
+      // 見出しのすぐ後 → 見出しの横 / 小項目の間 → その間 / 最後 → 次の手順との間
+      if (lastMain && items.length) lastMain.notes.push({ pos: lastStep === lastMain ? lastMain.subs.length : Infinity, items, line: i, uid: idOf(i) });
+      lineInfo.push({ type: "memo" });
+      return;
+    }
+    if (SUB_RE.test(s) && lastStep) {
+      const t = clean(s.replace(SUB_RE, ""));
+      if (t) lastStep.subs.push({ text: subText(t), line: i });
+      lineInfo.push({ type: "sub" });
+      return;
+    }
+    if (LANE_RE.test(s)) {
+      const lane = s.replace(LANE_RE, "").split(/→|->|⇒|＞|>/).map(clean).filter(Boolean)
+        .map((t, k) => Object.assign(classify(stepText(t)), { line: i, subs: [], uid: `${idOf(i)}|${k}` }));
+      if (!block) {
+        block = { kind: "block", lanes: [], line: i, notes: [], subs: [], uid: idOf(i) };
+        units.push(block);
+        lineInfo.push({ type: "lane", n: units.length });
+      } else {
+        lineInfo.push({ type: "lane" });
+      }
+      block.lanes.push(lane.length ? lane : [Object.assign(classify(""), { line: i, subs: [] })]);
+      side = null; lastStep = null; lastMain = block;
+      return;
+    }
+    if (SIDE_RE.test(s) && lastMain && lastMain.kind !== "block") {
+      const t = s.replace(SIDE_RE, "").replace(/＞/g, ">");
+      const p = t.indexOf(">");
+      const head = p >= 0 ? t.slice(0, p) : t;
+      const target = p >= 0 ? clean(t.slice(p + 1).split(">")[0]) : "";
+      if (!side) { side = { after: lastMain, items: [], target: "", line: i }; sides.push(side); }
+      if (target) side.target = target;
+      for (const [k, part] of head.split(/→|->|⇒/).map(clean).filter(Boolean).entries()) {
+        const st = Object.assign(classify(stepText(part)), { subs: [], line: i, uid: `${idOf(i)}|<${k}` });
+        side.items.push(st);
+        lastStep = st;
+      }
+      block = null;
+      lineInfo.push({ type: "side" });
+      return;
+    }
+
+    block = null; side = null;
+    if (SUB_RE.test(s)) s = clean(s.replace(SUB_RE, ""));
+    if (SIDE_RE.test(s)) s = clean(s.replace(SIDE_RE, ""));
+    const t = s.replace(/＞/g, ">");
+    const p = t.indexOf(">");
+    const head = p >= 0 ? t.slice(0, p) : t;
+    const chain = p >= 0 ? t.slice(p + 1).split(">").map(clean).filter(Boolean) : [];
+    const u = Object.assign(classify(stepText(clean(head))), { chain, line: i, subs: [], notes: [], uid: idOf(i) });
+    units.push(u);
+    lastMain = lastStep = u;
+    lineInfo.push({ type: "step", n: units.length });
+  });
+  return { units, sides, lineInfo };
+}
+
+function findTarget(it, units) {
+  if (/^[#＃]/.test(it)) {
+    const m = it.match(/^[#＃]\s*([0-9０-９]+)/);
+    if (!m) return { error: `「${it}」の番号が読めません。#3 のように書いてください。` };
+    const n = parseInt(toHalf(m[1]), 10);
+    if (n < 1 || n > units.length) return { error: `#${n} の手順はありません（手順は 1〜${units.length}）。` };
+    return { index: n - 1 };
+  }
+  if (isWord(it, START_WORDS) || isWord(it, END_WORDS)) return { index: -1 };
+  const t = clean(it.replace(NUM_RE, ""));
+  return { index: units.findIndex(u => u.kind !== "block" && (u.text === it || u.text === t)) };
+}
+
+// 図形（nodes）と矢印（edges）を作る
+function buildGraph(units, sides) {
+  const nodes = [], edges = [], msgs = [], M = units.length;
+  const entry = [], exit = [];
+  const add = n => nodes.push(n) - 1;
+  units.forEach((u, i) => {
+    if (u.kind !== "block") {
+      entry[i] = exit[i] = add(Object.assign({}, u, { unit: i, col: 0 }));
+      return;
+    }
+    u.fork = add({ kind: "bar", unit: i, line: u.line, key: `${u.uid}|f` });
+    u.laneNodes = u.lanes.map((lane, j) => lane.map(s => add(Object.assign({}, s, { unit: i, lane: j }))));
+    u.join = add({ kind: "bar", unit: i, line: u.line, join: true, key: `${u.uid}|j` });
+    entry[i] = u.fork;
+    exit[i] = u.join;
+    for (const l of u.laneNodes) {
+      edges.push({ a: u.fork, b: l[0], type: "down" });
+      let k = 0;
+      for (; k < l.length - 1 && !nodes[l[k]].isEnd; k++) edges.push({ a: l[k], b: l[k + 1], type: "down" });
+      if (k === l.length - 1 && !nodes[l[k]].isEnd) edges.push({ a: l[k], b: u.join, type: "down" });
+    }
+  });
+
+  const branch = [];
+  for (let i = 0; i < M; i++) {
+    const u = units[i], cur = exit[i];
+    if (i < M - 1 && !(u.kind !== "block" && u.isEnd)) edges.push({ a: cur, b: entry[i + 1], type: "down" });
+    branch[i] = false;
+    if (u.kind === "block" || !u.chain.length) continue;
+    let prv = cur, col = 0, jumped = false, stay = false;
+    for (const it of u.chain) {
+      if (isWord(it, STAY_WORDS)) { stay = true; break; }
+      if (isWord(it, BACK_WORDS)) break;
+      const tgt = findTarget(it, units);
+      if (tgt.error) { msgs.push({ line: u.line, level: "warn", text: tgt.error }); break; }
+      if (tgt.index >= 0) {
+        edges.push({ a: prv, b: entry[tgt.index], type: prv !== cur && tgt.index === i + 1 ? "merge" : "jump" });
+        jumped = true;
+        break;
+      }
+      col++;
+      const n = add(Object.assign(classify(it), { unit: i, col, line: u.line, side: true, subs: [], uid: `${u.uid}|s${col}` }));
+      edges.push({ a: prv, b: n, type: "right" });
+      prv = n;
+    }
+    if (!jumped && !stay && prv !== cur && i < M - 1 && !nodes[prv].isEnd) edges.push({ a: prv, b: entry[i + 1], type: "merge" });
+    branch[i] = jumped || prv !== cur;
+  }
+
+  // 左に並行して進む手順
+  const sideLanes = [];
+  for (const sd of sides) {
+    const from = units.indexOf(sd.after);
+    let to = from + 1;
+    if (sd.target) {
+      const t = findTarget(sd.target, units);
+      if (t.error) msgs.push({ line: sd.line, level: "warn", text: t.error });
+      else if (t.index < 0) msgs.push({ line: sd.line, level: "warn", text: `合流先の「${sd.target}」という手順が見つかりません。` });
+      else if (t.index <= from) msgs.push({ line: sd.line, level: "warn", text: "合流先は、分かれた手順より下の手順にしてください。" });
+      else to = t.index;
+    }
+    const ids = sd.items.map(it => add(Object.assign({}, it, { sideLane: true })));
+    for (let k = 0; k < ids.length - 1 && !nodes[ids[k]].isEnd; k++) edges.push({ a: ids[k], b: ids[k + 1], type: "down" });
+    sideLanes.push({ from, to: to < M ? to : -1, ids, line: sd.line });
+  }
+
+  const lonely = units.findIndex((u, i) => u.kind === "dec" && !branch[i]);
+  if (lonely >= 0 && !msgs.length) {
+    msgs.push({ line: units[lonely].line, level: "info", text: "判断（？）に「いいえ」の行き先がありません。行の最後に「> 処理」や「> #番号」を付けると右に分かれます。" });
+  }
+  return { nodes, edges, msgs, units, entry, exit, branch, sideLanes, M };
+}
+
+// ---------- 文字の折り返し ----------
+const mctx = document.createElement("canvas").getContext("2d");
+function textWidth(t, fs, fam) { mctx.font = `${fs}px ${fam}`; return mctx.measureText(t).width; }
+function wrap(text, maxW, fs, fam) {
+  const lines = []; let cur = "";
+  for (const ch of Array.from(text)) {
+    if (cur && textWidth(cur + ch, fs, fam) > maxW && !NO_LINE_START.includes(ch)) { lines.push(cur); cur = ch; }
+    else cur += ch;
+  }
+  if (cur || !lines.length) lines.push(cur);
+  return lines;
+}
+// 文字を入れる枠（図形の形ごと）
+function textBox(t) {
+  if (t.look === "dec") return { w: t.w * 0.5, h: t.h * 0.62, ins: 0 };
+  if (t.look === "term") return { w: t.w * 0.906 - 6, h: t.h * 0.86, ins: 3 };
+  return { w: t.w - 6, h: t.h - 2, ins: 3 };
+}
+function fitSize(t, base, fam) {
+  const tb = textBox(t);
+  for (let fs = base; fs >= 6; fs -= 0.5) {
+    const lines = wrap(t.label, tb.w, fs, fam);
+    if (lines.length * fs * LH <= tb.h && lines.every(l => textWidth(l, fs, fam) <= tb.w + 0.5)) return fs;
+  }
+  return 6;
+}
+// 同じ種類の文字はできるだけ同じ大きさにそろえる
+function fitGroup(items, base, fam) {
+  if (!items.length) return;
+  const fits = items.map(t => fitSize(t, base, fam));
+  const uni = Math.max(Math.min(...fits), base * 0.7);
+  items.forEach((t, i) => {
+    t.fs = Math.min(uni, fits[i]);
+    t.wrapped = wrap(t.label, textBox(t).w, t.fs, fam);
+  });
+}
+
+// ---------- 配置（単位：pt） ----------
+// 高さは「1 段 = 1」の割合で決めてから、スライドに収まるように拡大する
+const A = { box: 0.55, gap: 0.45, dec: 0.8, bar: 0.45, hdr: 0.5, pad: 0.14, sub: 0.46, subGap: 0.26, note: 0.42, noteGap: 0.14 };
+const isShape = n => n.kind !== "bar";
+const topOf = n => n.y - n.h / 2;
+const bottomOf = n => n.y + n.h / 2;
+const hasSubs = n => !!(n.subs && n.subs.length);
+// 上から順（ほぼ同じ高さのものは、書いた順）に並べる
+function byPosition(items) {
+  const sorted = items.slice().sort((a, b) => topOf(a) - topOf(b));
+  const out = [];
+  for (let i = 0; i < sorted.length;) {
+    const tol = Math.max(3, sorted[i].h * 0.3);
+    let j = i + 1;
+    while (j < sorted.length && topOf(sorted[j]) - topOf(sorted[i]) < tol) j++;
+    out.push(...sorted.slice(i, j).sort((a, b) => a.line - b.line || (a.idx ?? 0) - (b.idx ?? 0)));
+    i = j;
+  }
+  return out;
+}
+const CIRCLED = k => (k >= 1 && k <= 20 ? String.fromCharCode(0x2460 + k - 1) : `(${k})`);
+
+function layout(g, o) {
+  const [W, H] = SIZES[o.size];
+  const L = { W, H, nodes: g.nodes, lines: [], notes: [], dots: [], title: null, fam: FONTS[o.font][1] };
+  if (o.title) L.title = { x: W * 0.04, y: H * 0.045, fs: Math.min(24, H * 0.045), text: o.title };
+  if (!g.M) return L;
+
+  // 形と文字（番号）
+  g.nodes.forEach((n, idx) => { n.idx = idx; });
+  for (const n of g.nodes) {
+    if (!isShape(n)) continue;
+    n.look = o.shape === "kind" ? n.kind : "proc";
+    n.label = n.text;
+  }
+
+  // 縦の大きさ（割合）
+  const contH = n => A.hdr + A.pad * 2 + n.subs.length * A.sub + (n.subs.length - 1) * A.subGap + (n.stretch || 0);
+  const hOf = n => (hasSubs(n) ? contH(n) : n.look === "dec" ? A.dec : A.box);
+  const slotOf = n => (hasSubs(n) ? contH(n) + A.gap : 1);
+  const depth = u => Math.max(...u.lanes.map(l => l.length));
+  const extra = new Array(g.M).fill(0);
+  const slotTop = [];
+  const place = () => {
+    let y = 0;
+    g.units.forEach((u, i) => {
+      slotTop[i] = y;
+      if (u.kind === "block") {
+        const d = depth(u);
+        g.nodes[u.fork].ay = y + A.bar / 2;
+        u.laneNodes.forEach(l => l.forEach((ni, r) => { g.nodes[ni].ay = y + A.bar + r + 0.5; }));
+        g.nodes[u.join].ay = y + A.bar + d + A.bar / 2;
+        y += d + 2 * A.bar + extra[i];
+      } else {
+        const n = g.nodes[g.entry[i]];
+        n.ay = y + slotOf(n) / 2;
+        y += slotOf(n) + extra[i];
+      }
+    });
+    return y;
+  };
+  let total = place();
+
+  // 左の並行手順：合流まで届かなければ間を広げ、余るときは 1 つだけなら縦に伸ばす
+  for (const sl of g.sideLanes) {
+    const need = sl.ids.reduce((s, ni) => s + slotOf(g.nodes[ni]), 0);
+    const start = slotTop[sl.from];
+    if (sl.to < 0) continue;
+    const room = slotTop[sl.to] - start;
+    if (need > room) { extra[sl.to - 1] += need - room; total = place(); }
+    else if (sl.ids.length === 1 && hasSubs(g.nodes[sl.ids[0]])) g.nodes[sl.ids[0]].stretch = room - need;
+  }
+  for (const sl of g.sideLanes) {
+    let y = slotTop[sl.from];
+    for (const ni of sl.ids) { const n = g.nodes[ni]; n.ay = y + slotOf(n) / 2; y += slotOf(n); }
+    total = Math.max(total, y);
+  }
+
+  // 横の並び：左に並行手順・同時進行、真ん中が本線、右に「いいえ」の処理と照査・打合せ
+  const sideCol = [];
+  const used = [];
+  for (const sl of g.sideLanes) {
+    const end = sl.to < 0 ? g.M : sl.to;
+    let c = 1;
+    while ((used[c] || []).some(r => !(end <= r[0] || sl.from >= r[1]))) c++;
+    (used[c] = used[c] || []).push([sl.from, end]);
+    sideCol.push(c);
+  }
+  let minOff = -Math.max(0, ...sideCol), maxOff = 0;
+  for (const n of g.nodes) if (n.side) maxOff = Math.max(maxOff, n.col);
+  for (const u of g.units) if (u.kind === "block") { const h = (u.lanes.length - 1) / 2; minOff = Math.min(minOff, -h); maxOff = Math.max(maxOff, h); }
+  const hasNotes = g.units.some(u => u.notes && u.notes.length);
+  const noteCols = hasNotes ? 0.85 : 0;
+
+  const aL = W * 0.04, aR = W - W * 0.04, aT = o.title ? H * 0.15 : H * 0.05, aB = H - H * 0.05;
+  const cols = maxOff - minOff + 1 + noteCols;
+  const jumps = g.edges.filter(e => e.type === "jump").length;
+  const laneSpace = jumps ? 14 + 12 * jumps : 0;
+  const cp = Math.min((aR - aL - laneSpace) / cols, 250);
+  const s = Math.min((aB - aT) / total, 90);
+  const boxW = cp * 0.7;
+  const left = aL + ((aR - aL) - (cols * cp + laneSpace)) / 2;
+  const mainX = left + cp * (-minOff + 0.5);
+  const top = aT + ((aB - aT) - total * s) / 2;
+  const Y = a => top + a * s;
+
+  const size = n => {
+    if (hasSubs(n)) { n.w = boxW; n.h = contH(n) * s; }
+    else if (n.look === "dec") { n.w = boxW * 1.15; n.h = A.dec * s; }
+    else if (n.look === "term") { n.w = boxW * 0.8; n.h = A.box * s; }
+    else { n.w = boxW; n.h = A.box * s; }
+  };
+  g.units.forEach((u, i) => {
+    if (u.kind !== "block") { const n = g.nodes[g.entry[i]]; size(n); n.x = mainX; n.y = Y(n.ay); return; }
+    const k = u.lanes.length;
+    const xs = u.lanes.map((l, j) => mainX + (j - (k - 1) / 2) * cp);
+    const x1 = Math.min(...xs) - boxW * 0.35, x2 = Math.max(...xs) + boxW * 0.35;
+    for (const b of [u.fork, u.join]) Object.assign(g.nodes[b], { x: mainX, x1, x2, w: x2 - x1, h: Math.max(2.5, s * 0.06), y: Y(g.nodes[b].ay) });
+    u.laneNodes.forEach((l, j) => l.forEach(ni => { const n = g.nodes[ni]; size(n); n.x = xs[j]; n.y = Y(n.ay); }));
+  });
+  g.sideLanes.forEach((sl, k) => sl.ids.forEach(ni => { const n = g.nodes[ni]; size(n); n.x = mainX - sideCol[k] * cp; n.y = Y(n.ay); }));
+  for (const n of g.nodes) {
+    if (!n.side) continue;
+    size(n);
+    n.x = mainX + n.col * cp;
+    n.y = g.nodes[g.entry[n.unit]].y;
+  }
+
+  // 照査・打合せの箱（右の列）
+  const noteW = boxW * 0.62, noteH = A.note * s;
+  const noteX = mainX + (maxOff > 0 ? maxOff * cp : 0) + boxW / 2 + noteW * 0.7 + noteW / 2;
+  const counts = {};
+  const groups = [];
+  g.units.forEach((u, i) => {
+    if (!u.notes || !u.notes.length) return;
+    for (const grp of u.notes) {
+      const items = grp.items.map(t => {
+        const base = clean(t);
+        counts[base] = (counts[base] || 0) + 1;
+        const label = o.num && !/[①-⑳]$/.test(base) ? base + CIRCLED(counts[base]) : base;
+        const cat = /照査/.test(base) ? "check" : /打合|打ち合|協議|会議/.test(base) ? "meet" : "other";
+        return { kind: "note", text: base, label, cat, line: grp.line, look: "proc", w: noteW, h: noteH, unit: i, pos: grp.pos, uid: `${grp.uid}|n${grp.items.indexOf(t)}` };
+      });
+      groups.push({ unit: i, pos: grp.pos, items, line: grp.line, uid: grp.uid });
+    }
+  });
+
+  // ドラッグで動かした分を足す。どの図形かは「行」で覚えるので、文字を書き換えても消えない
+  const seen = {};
+  L.moved = 0;
+  const applyOffset = n => {
+    const base = n.uid || `${n.kind === "note" ? "@" : ""}${n.text}|${n.lane ?? ""}|${n.side ? n.col : ""}|${n.sideLane ? "<" : ""}`;
+    seen[base] = (seen[base] || 0) + 1;
+    n.key = seen[base] > 1 ? `${base}|${seen[base]}` : base;
+    const off = o.offsets[n.key];
+    if (off) { n.x += off[0]; n.y += off[1]; L.moved++; }
+  };
+  g.nodes.filter(isShape).forEach(applyOffset);
+  // 点（照査・打合せや並行作業が本線につく所）も動かせる。動かした分は点の位置そのもの
+  const placeDot = (d, name) => {
+    d.x0 = d.x; d.y0 = d.y;
+    const base = `●${name}`;
+    seen[base] = (seen[base] || 0) + 1;
+    d.key = seen[base] > 1 ? `${base}|${seen[base]}` : base;
+    const off = o.offsets[d.key];
+    if (off) { d.x += off[0]; d.y += off[1]; L.moved++; }
+    return d;
+  };
+
+  // 小項目の位置（外枠の中に縦に並べる）
+  for (const n of g.nodes) {
+    if (!isShape(n) || !hasSubs(n)) continue;
+    const x0 = n.x - n.w / 2, t0 = topOf(n);
+    n.head = { x: n.x, y: t0 + (A.hdr * s) / 2, w: n.w, h: A.hdr * s, look: "proc", label: n.label };
+    const k = n.subs.length;
+    const gapS = (A.subGap + (n.stretch || 0) / Math.max(1, k - 1)) * s;
+    const firstTop = t0 + (A.hdr + A.pad) * s + (k === 1 ? (n.stretch || 0) * s / 2 : 0);
+    n.subBoxes = n.subs.map((sb, j) => ({
+      x: n.x, y: firstTop + j * (A.sub * s + gapS) + (A.sub * s) / 2, w: n.w - n.w * 0.08, h: A.sub * s,
+      look: "proc", label: o.num && k > 1 ? `(${j + 1})${sb.text}` : sb.text, line: sb.line, x0,
+    }));
+  }
+
+  // 照査・打合せの点（本線の矢印の上）と箱の高さ
+  const nodeOf = i => g.nodes[g.entry[i]];
+  for (const grp of groups) {
+    const n = nodeOf(grp.unit);
+    let dot;
+    if (hasSubs(n) && grp.pos === 0) dot = { x: n.x + n.w / 2, y: n.head.y, onEdge: true, owner: n.idx };
+    else if (hasSubs(n) && grp.pos < n.subs.length) {
+      const a = n.subBoxes[grp.pos - 1], b = n.subBoxes[grp.pos];
+      dot = { x: n.x, y: (bottomOf(a) + topOf(b)) / 2, owner: n.idx };
+    } else {
+      const next = grp.unit + 1 < g.M ? nodeOf(grp.unit + 1) : null;
+      const b = g.nodes[g.exit[grp.unit]];
+      dot = next ? { x: b.x, y: (bottomOf(b) + topOf(next)) / 2 } : { x: b.x, y: bottomOf(b) + (A.gap / 2) * s };
+      dot.owner = b.idx;   // PowerPoint では、この箱と点・照査打合せを 1 つにまとめる
+    }
+    grp.dot = dot;
+  }
+  groups.sort((a, b) => a.dot.y - b.dot.y);
+  let floor = -Infinity;
+  for (const grp of groups) {
+    const k = grp.items.length, tot = k * noteH + (k - 1) * A.noteGap * s;
+    let t = Math.max(grp.dot.y - tot / 2, floor + 3);
+    floor = t + tot;
+    // 点を動かすと、箱も一緒についていく（箱だけ動かすこともできる）
+    placeDot(grp.dot, grp.uid);
+    const ddx = grp.dot.x - grp.dot.x0, ddy = grp.dot.y - grp.dot.y0;
+    grp.items.forEach((it, j) => { it.x = noteX + ddx; it.y = t + j * (noteH + A.noteGap * s) + noteH / 2 + ddy; });
+    grp.items.forEach(applyOffset);
+    L.dots.push(grp.dot);
+    for (const it of grp.items) {
+      L.notes.push(it);
+      const S = [grp.dot.x, grp.dot.y], E = [it.x - it.w / 2, it.y];
+      const ln = Math.abs(S[1] - E[1]) < 0.5 ? { route: "straight" } : { route: "h3", mx: E[0] - noteW * 0.35 };
+      L.lines.push(Object.assign(ln, { S, E, type: "note", a: -1, b: it, dot: grp.dot, dashed: true, arrow: false }));
+    }
+  }
+
+  // 照査①・打合せ①… も、位置の上から順に付け直す
+  if (o.num) {
+    const k = {};
+    for (const it of byPosition(L.notes)) {
+      if (/[①-⑳]$/.test(it.text)) continue;
+      k[it.text] = (k[it.text] || 0) + 1;
+      it.label = it.text + CIRCLED(k[it.text]);
+    }
+  }
+
+  // 文字の大きさ
+  const base = Math.max(7, Math.min(16, A.box * s * 0.4));
+  fitGroup(g.nodes.filter(n => isShape(n) && !hasSubs(n)).concat(g.nodes.filter(hasSubs).map(n => n.head)), base, L.fam);
+  fitGroup(g.nodes.filter(hasSubs).flatMap(n => n.subBoxes), base * 0.92, L.fam);
+  fitGroup(L.notes, base * 0.95, L.fam);
+  for (const n of g.nodes.filter(hasSubs)) { n.fs = n.head.fs; n.wrapped = n.head.wrapped; }
+
+  // 矢印の通り道。route: straight / v3=縦→横→縦 / h3=横→縦→横 / j4=右→縦→左→下 / h2=横→縦 / v2=縦→横
+  const gapAbove = b => topOf(b) - s * 0.09;
+  const shapesRight = Math.max(...g.nodes.map(n => (isShape(n) ? n.x + n.w / 2 : n.x2)), ...L.notes.map(n => n.x + n.w / 2));
+  const laneX = shapesRight + 12;
+  let laneNo = 0;
+  const pts = ln => ln.route === "straight" ? [ln.S, ln.E]
+    : ln.route === "v3" ? [ln.S, [ln.S[0], ln.my], [ln.E[0], ln.my], ln.E]
+    : ln.route === "h3" ? [ln.S, [ln.mx, ln.S[1]], [ln.mx, ln.E[1]], ln.E]
+    : ln.route === "h2" ? [ln.S, [ln.E[0], ln.S[1]], ln.E]
+    : ln.route === "v2" ? [ln.S, [ln.S[0], ln.E[1]], ln.E]
+    : [ln.S, [ln.lx, ln.S[1]], [ln.lx, ln.gy], [ln.E[0], ln.gy], ln.E];
+  const kOf = v => v === -1 || v == null ? "" : typeof v === "number"
+    ? (g.nodes[v].key || `bar${g.nodes[v].unit}${g.nodes[v].join ? "j" : "f"}`) : (v.key || "");
+  const byKey = {};
+  g.nodes.forEach((n, i) => { if (n.key) byKey[n.key] = i; });
+  // 矢印の行き先・出どころを付け替えたときの通り道（相手の位置で形を決める）
+  const routeBetween = (a, b, ln) => {
+    // 間に別の箱があるかどうか（あれば右を回る）
+    const blocked = g.nodes.some(n => isShape(n) && n !== a && n !== b &&
+      Math.abs(n.x - b.x) < n.w / 2 + 2 && topOf(n) < topOf(b) && bottomOf(n) > bottomOf(a));
+    if (topOf(b) >= bottomOf(a) - 0.5 && !blocked) {
+      ln.S = [a.x, bottomOf(a)]; ln.E = [b.x, topOf(b)]; ln.sites = [2, 0];
+      if (Math.abs(a.x - b.x) < 0.5) ln.route = "straight"; else { ln.route = "v3"; ln.my = (ln.S[1] + ln.E[1]) / 2; }
+    } else if (blocked || bottomOf(b) <= topOf(a) + 0.5) {
+      ln.S = [a.x + a.w / 2, a.y]; ln.E = [b.x, topOf(b)]; ln.sites = [3, 0];
+      ln.route = "j4"; ln.lx = Math.max(a.x + a.w / 2, b.x + b.w / 2) + 16; ln.gy = topOf(b) - s * 0.12;
+    } else {
+      const right = b.x > a.x;
+      ln.S = [a.x + (right ? 1 : -1) * a.w / 2, a.y]; ln.E = [b.x - (right ? 1 : -1) * b.w / 2, b.y]; ln.sites = right ? [3, 1] : [1, 3];
+      if (Math.abs(a.y - b.y) < 0.5) ln.route = "straight"; else { ln.route = "h3"; ln.mx = (ln.S[0] + ln.E[0]) / 2; }
+    }
+  };
+  for (const e of g.edges) {
+    const key = `～${e.type}|${kOf(e.a)}|${kOf(e.b)}|`;
+    const rw = o.rewires[key];
+    if (rw) {
+      // はしは「箱」か「何もない所の点（伸ばした先）」
+      const endOf = (v, def) => v === undefined ? g.nodes[def]
+        : typeof v === "string" ? (byKey[v] !== undefined ? g.nodes[byKey[v]] : null)
+        : { x: v.x, y: v.y, w: 0, h: 0, free: true };
+      const A = endOf(rw.a, e.a), B = endOf(rw.b, e.b);
+      if (A && B && A !== B) {
+        const ln = { type: e.type, a: A.free ? -1 : A.idx, b: B.free ? -1 : B.idx, freeA: A.free ? A : null, freeB: B.free ? B : null, arrow: true, key, edge: true };
+        routeBetween(A, B, ln);
+        L.lines.push(ln);
+        L.moved++;
+        continue;
+      }
+    }
+    const a = g.nodes[e.a], b = g.nodes[e.b];
+    let S, E, ln;
+    if (e.type === "down" || e.type === "merge") {
+      S = [a.kind === "bar" ? b.x : a.x, bottomOf(a)];
+      E = [b.kind === "bar" ? a.x : b.x, topOf(b)];
+      if (Math.abs(S[0] - E[0]) < 0.5) ln = { route: "straight" };
+      else {
+        const gy = gapAbove(b);
+        ln = { route: "v3", my: e.type === "merge" && gy > S[1] && gy < E[1] ? gy : (S[1] + E[1]) / 2 };
+      }
+    } else if (e.type === "right") {
+      S = [a.x + a.w / 2, a.y];
+      E = [b.x - b.w / 2, b.y];
+      ln = Math.abs(S[1] - E[1]) < 0.5 ? { route: "straight" } : { route: "h3", mx: (S[0] + E[0]) / 2 };
+    } else {
+      S = [a.x + a.w / 2, a.y];
+      E = [b.x, topOf(b)];
+      ln = { route: "j4", lx: laneX + 12 * laneNo++, gy: gapAbove(b) };
+    }
+    L.lines.push(Object.assign(ln, { S, E, type: e.type, a: e.a, b: e.b, arrow: true, key, edge: true }));
+  }
+  // 小項目どうしの矢印
+  for (const n of g.nodes.filter(hasSubs)) {
+    for (let j = 0; j < n.subBoxes.length - 1; j++) {
+      const a = n.subBoxes[j], b = n.subBoxes[j + 1];
+      L.lines.push({ route: "straight", S: [a.x, bottomOf(a)], E: [b.x, topOf(b)], type: "sub", owner: n, a: j, b: j + 1, arrow: true });
+    }
+  }
+  // 左の並行手順：本線の点から破線で分かれ、破線で本線の点に合流
+  g.sideLanes.forEach(sl => {
+    const first = g.nodes[sl.ids[0]], last = g.nodes[sl.ids[sl.ids.length - 1]];
+    const P = nodeOf(sl.from);
+    const d1 = placeDot({ x: P.x, y: topOf(P) - (A.gap / 2) * s, owner: P.idx }, `<${first.uid}`);
+    L.dots.push(d1);
+    L.lines.push({ route: "h2", S: [d1.x, d1.y], E: [first.x, topOf(first)], type: "branch", a: -1, b: first.idx, dot: d1, dashed: true, arrow: false });
+    if (sl.to >= 0 && !last.isEnd) {
+      const T = nodeOf(sl.to);
+      const d2 = placeDot({ x: T.x, y: topOf(T) - (A.gap / 2) * s, owner: T.idx }, `>${last.uid}`);
+      L.dots.push(d2);
+      L.lines.push({ route: "v2", S: [last.x, bottomOf(last)], E: [d2.x, d2.y], type: "rejoin", a: last.idx, b: -1, dot: d2, dashed: true, arrow: false });
+    }
+  });
+  // 線の曲がる位置もドラッグで動かせる（縦→横→縦は上下、横→縦→横は左右、戻りの線は両方）
+  for (const ln of L.lines) {
+    if ((ln.route === "h2" || ln.route === "v2") && (Math.abs(ln.S[0] - ln.E[0]) < 0.5 || Math.abs(ln.S[1] - ln.E[1]) < 0.5)) ln.route = "straight";
+    if (ln.type !== "sub" && !ln.key) ln.key = `～${ln.type}|${kOf(ln.a)}|${kOf(ln.b)}|${ln.dot ? ln.dot.key : ""}`;
+    const off = ln.key && o.offsets[ln.key];
+    if (off && ["v3", "h3", "j4"].includes(ln.route)) {
+      if (ln.route === "v3") ln.my += off[1];
+      else if (ln.route === "h3") ln.mx += off[0];
+      else { ln.lx += off[0]; ln.gy += off[1]; }
+      L.moved++;
+    } else if (off && ln.route === "straight" && ln.edge) {
+      // まっすぐな矢印は、傾かないようにそのまま横（横向きの矢印は縦）にずらす。
+      // はしは両方の箱のふちの上に残す（はみ出す分は箱の中に収める）
+      const vert = Math.abs(ln.S[0] - ln.E[0]) < 0.5;
+      const span = v => {
+        if (v < 0) return null;
+        const n = g.nodes[v];
+        if (n.kind === "bar") return vert ? [n.x1, n.x2] : [topOf(n), bottomOf(n)];
+        return vert ? [n.x - n.w / 2, n.x + n.w / 2] : [topOf(n), bottomOf(n)];
+      };
+      const ra = span(ln.a), rb = span(ln.b);
+      let lo = -Infinity, hi = Infinity;
+      for (const r of [ra, rb]) if (r) { lo = Math.max(lo, r[0] + 2); hi = Math.min(hi, r[1] - 2); }
+      const base = vert ? ln.S[0] : ln.S[1];
+      const to = lo <= hi ? Math.min(hi, Math.max(lo, base + (vert ? off[0] : off[1]))) : base;
+      if (Math.abs(to - base) > 0.1) {
+        if (vert) { ln.S = [to, ln.S[1]]; ln.E = [to, ln.E[1]]; } else { ln.S = [ln.S[0], to]; ln.E = [ln.E[0], to]; }
+        ln.shifted = true;
+        L.moved++;
+      }
+    }
+    const ls = ln.key && o.lineStyles[ln.key];
+    if (ls === "none") ln.hidden = true;
+    else if (ls) ln.dashed = ls === "dashed";
+    ln.pts = pts(ln);
+  }
+  // 消した線は描かない（「消した線を戻す」で戻せる）
+  L.hiddenLines = L.lines.filter(l => l.hidden).length;
+  L.lines = L.lines.filter(l => !l.hidden);
+  L.dotR = Math.max(1.8, s * 0.07);
+  // 点を吸い付かせる先：実線の矢印と、図形のふち
+  L.snap = [];
+  for (const ln of L.lines) if (!ln.dashed) for (let k = 0; k < ln.pts.length - 1; k++) L.snap.push([ln.pts[k], ln.pts[k + 1]]);
+  const edges = t => { const x1 = t.x - t.w / 2, x2 = t.x + t.w / 2, y1 = topOf(t), y2 = bottomOf(t); return [[[x1, y1], [x2, y1]], [[x2, y1], [x2, y2]], [[x2, y2], [x1, y2]], [[x1, y2], [x1, y1]]]; };
+  for (const n of g.nodes) {
+    if (!isShape(n)) continue;
+    L.snap.push(...edges(n));
+    if (hasSubs(n)) { L.snap.push(...edges(n.head)); n.subBoxes.forEach(b => L.snap.push(...edges(b))); }
+  }
+  return L;
+}
+
+// ---------- プレビュー（SVG） ----------
+const esc = s => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+const f1 = v => (Math.round(v * 10) / 10).toString();
+function svgText(t, color, align) {
+  const k = t.wrapped.length;
+  const x = align === "l" ? t.x - t.w / 2 + textBox(t).ins + 1 : t.x;
+  return t.wrapped.map((line, j) =>
+    `<text x="${f1(x)}" y="${f1(t.y + (j - (k - 1) / 2) * t.fs * LH)}" font-size="${t.fs}" fill="#${color}" text-anchor="${align === "l" ? "start" : "middle"}" dominant-baseline="central">${esc(line)}</text>`).join("");
+}
+function svgRect(t, fill, line, lineW, cls = "") {
+  return `<rect${cls ? ` class="${cls}"` : ""} x="${f1(t.x - t.w / 2)}" y="${f1(topOf(t))}" width="${f1(t.w)}" height="${f1(t.h)}" fill="#${fill}" stroke="#${line}" stroke-width="${lineW}"/>`;
+}
+function svgOf(L, st, forImage) {
+  const c = v => "#" + v;
+  const out = [];
+  out.push(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${L.W} ${L.H}" width="${L.W}" height="${L.H}" font-family='${L.fam}'>`);
+  out.push(`<defs><marker id="ah" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="5.5" markerHeight="5.5" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="${c(st.arrow)}"/></marker></defs>`);
+  out.push(`<rect width="${L.W}" height="${L.H}" fill="#FFFFFF"/>`);
+  if (L.title) out.push(`<text x="${f1(L.title.x)}" y="${f1(L.title.y)}" font-size="${f1(L.title.fs)}" font-weight="700" fill="${c(st.text)}" dominant-baseline="hanging">${esc(L.title.text)}</text>`);
+  if (!L.nodes.length && !forImage) {
+    out.push(`<text class="empty" x="${L.W / 2}" y="${L.H / 2}" text-anchor="middle">左の「手順」に 1 行ずつ書くと、ここに図ができます</text>`);
+  }
+  const WIRE_CURSOR = { v3: "ns-resize", h3: "ew-resize", j4: "move" };
+  const cursorOf = ln => WIRE_CURSOR[ln.route] || (ln.edge ? (Math.abs(ln.S[0] - ln.E[0]) < 0.5 ? "ew-resize" : "ns-resize") : "pointer");
+  L.lines.forEach((ln, i) => {
+    if (ln.type === "sub") return;
+    const d = `M${ln.pts.map(p => f1(p[0]) + "," + f1(p[1])).join(" L")}`;
+    out.push(`<path d="${d}" fill="none" stroke="${c(st.arrow)}" stroke-width="${ln.dashed ? Math.max(0.75, st.lineW * 0.75) : st.lineW}"${ln.dashed ? ' stroke-dasharray="4 3"' : ""}${ln.arrow ? ' marker-end="url(#ah)"' : ""}/>`);
+    if (forImage) return;
+    // 選んでいる線は色を付けて目立たせる
+    if (ln.key && ln.key === selWire) out.push(`<path d="${d}" fill="none" stroke="#E0752D" stroke-opacity=".45" stroke-width="5" pointer-events="none"/>`);
+    // つかみやすいように、見えない太い線を重ねる（クリックで線の種類、曲がった線はドラッグで移動）
+    out.push(`<path class="wire" data-w="${i}" d="${d}" fill="none" stroke="#1D6A84" stroke-opacity="0" stroke-width="9" style="cursor:${cursorOf(ln)}"/>`);
+  });
+  L.nodes.forEach((n, i) => {
+    if (n.kind === "bar") {
+      out.push(`<path d="M${f1(n.x1)},${f1(topOf(n))} H${f1(n.x2)} M${f1(n.x1)},${f1(bottomOf(n))} H${f1(n.x2)}" stroke="${c(st.arrow)}" stroke-width="${st.lineW}" fill="none"/>`);
+      return;
+    }
+    out.push(`<g class="node" data-i="${i}" data-line="${n.line}">`);
+    if (hasSubs(n)) {
+      out.push(svgRect(n, st.body, st.proc[1], st.lineW, "shape"));
+      out.push(svgRect(n.head, st.head, st.proc[1], st.lineW));
+      out.push(svgText(n.head, st.text, "c"));
+      for (const ln of L.lines) if (ln.type === "sub" && ln.owner === n) {
+        out.push(`<path d="M${f1(ln.S[0])},${f1(ln.S[1])} L${f1(ln.E[0])},${f1(ln.E[1])}" stroke="${c(st.arrow)}" stroke-width="${st.lineW}" marker-end="url(#ah)"/>`);
+      }
+      for (const b of n.subBoxes) { out.push(svgRect(b, st.sub[0], st.sub[1], st.lineW)); out.push(svgText(b, st.text, "l")); }
+    } else {
+      const [fill, line] = st[n.look];
+      const x = n.x - n.w / 2, y = topOf(n);
+      if (n.look === "dec") out.push(`<path class="shape" d="M${f1(n.x)},${f1(y)} L${f1(x + n.w)},${f1(n.y)} L${f1(n.x)},${f1(y + n.h)} L${f1(x)},${f1(n.y)} Z" fill="${c(fill)}" stroke="${c(line)}" stroke-width="${st.lineW}"/>`);
+      else out.push(`<rect class="shape" x="${f1(x)}" y="${f1(y)}" width="${f1(n.w)}" height="${f1(n.h)}"${n.look === "term" ? ` rx="${f1(n.h / 2)}"` : ""} fill="${c(fill)}" stroke="${c(line)}" stroke-width="${st.lineW}"/>`);
+      out.push(svgText(n, st.text, "c"));
+    }
+    out.push(`</g>`);
+  });
+  L.notes.forEach((n, j) => {
+    out.push(`<g class="node" data-note="${j}" data-line="${n.line}">${svgRect(n, st.notes[n.cat], st.proc[1], st.lineW, "shape")}${svgText(n, st.text, "c")}</g>`);
+  });
+  // 矢印の両はし（ドラッグして別の箱に付け替える）
+  if (!forImage) L.lines.forEach((ln, i) => {
+    if (!ln.edge) return;
+    for (const [end, p] of [["a", ln.S], ["b", ln.E]]) {
+      if (ln[end] >= 0 && L.nodes[ln[end]].kind === "bar") continue;
+      // 伸ばして何にもつながっていないはしは、うっすら見せておく
+      const free = ln[end] < 0;
+      out.push(`<circle class="end" data-w="${i}" data-end="${end}" cx="${f1(p[0])}" cy="${f1(p[1])}" r="5" fill="#E0752D" fill-opacity="${free ? 0.3 : 0}"/>`);
+    }
+  });
+  // 箱を動かしている間の補助線
+  if (!forImage && dragGuides) {
+    if (dragGuides.x !== null) out.push(`<line x1="${f1(dragGuides.x)}" y1="0" x2="${f1(dragGuides.x)}" y2="${L.H}" stroke="#1D6A84" stroke-width="0.8" stroke-dasharray="3 3" pointer-events="none"/>`);
+    if (dragGuides.y !== null) out.push(`<line x1="0" y1="${f1(dragGuides.y)}" x2="${L.W}" y2="${f1(dragGuides.y)}" stroke="#1D6A84" stroke-width="0.8" stroke-dasharray="3 3" pointer-events="none"/>`);
+  }
+  L.dots.forEach((d, i) => out.push(`<g class="dot" data-dot="${i}"><circle cx="${f1(d.x)}" cy="${f1(d.y)}" r="${f1(Math.max(7, L.dotR * 2.5))}" fill="#000000" fill-opacity="0"/><circle cx="${f1(d.x)}" cy="${f1(d.y)}" r="${f1(L.dotR)}" fill="${c(st.arrow)}"/></g>`));
+  out.push(`</svg>`);
+  return out.join("");
+}
+
+// ---------- PowerPoint（.pptx） ----------
+const EMU = v => Math.round(v * 12700);
+function runXml(text, fs, color, font) {
+  return `<a:r><a:rPr lang="ja-JP" altLang="en-US" sz="${Math.round(fs * 100)}" dirty="0"><a:solidFill><a:srgbClr val="${color}"/></a:solidFill><a:latin typeface="${esc(font)}"/><a:ea typeface="${esc(font)}"/></a:rPr><a:t>${esc(text)}</a:t></a:r>`;
+}
+function slideXml(L, st, font) {
+  let id = 2;
+  const out = [];
+  const xfrm = (x, y, w, h, attrs = "") =>
+    `<a:xfrm${attrs}><a:off x="${EMU(x)}" y="${EMU(y)}"/><a:ext cx="${Math.max(0, EMU(w))}" cy="${Math.max(0, EMU(h))}"/></a:xfrm>`;
+  const lnXml = (color, w, arrow, dashed) =>
+    `<a:ln w="${EMU(w)}"><a:solidFill><a:srgbClr val="${color}"/></a:solidFill>${dashed ? '<a:prstDash val="dash"/>' : ""}${arrow ? '<a:tailEnd type="triangle" w="med" len="med"/>' : ""}</a:ln>`;
+  const flips = (h, v, rot) => `${rot ? ` rot="${rot}"` : ""}${h ? ' flipH="1"' : ""}${v ? ' flipV="1"' : ""}`;
+  const geom = { proc: "flowChartProcess", dec: "flowChartDecision", term: "flowChartTerminator" };
+  const kindName = { proc: "処理", dec: "判断", term: "端子" };
+
+  // 文字の入った図形（t は x, y, w, h, look, label, fs）
+  const shapeXml = (t, name, prst, fill, line, align = "ctr") => {
+    const ins = EMU(textBox(t).ins);
+    const body = t.label === undefined ? "" :
+      `<p:txBody><a:bodyPr wrap="square" lIns="${ins}" tIns="0" rIns="${ins}" bIns="0" rtlCol="0" anchor="ctr"><a:noAutofit/></a:bodyPr><a:lstStyle/>` +
+      `<a:p><a:pPr algn="${align}"><a:lnSpc><a:spcPts val="${Math.round(t.fs * LH * 100)}"/></a:lnSpc></a:pPr>${runXml(t.label, t.fs, st.text, font)}</a:p></p:txBody>`;
+    return `<p:sp><p:nvSpPr><p:cNvPr id="${id}" name="${name} ${id++}"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>` +
+      `<p:spPr>${xfrm(t.x - t.w / 2, topOf(t), t.w, t.h)}<a:prstGeom prst="${prst}"><a:avLst/></a:prstGeom>` +
+      `<a:solidFill><a:srgbClr val="${fill}"/></a:solidFill>${lnXml(line, st.lineW, false, false)}</p:spPr>${body}</p:sp>`;
+  };
+
+  // 矢印はすべて図形にくっつくコネクタ（接続点 0=上 1=左 2=下 3=右）
+  const adj = (name, v) => `<a:gd name="${name}" fmla="val ${Math.round(v * 100000)}"/>`;
+  const connXml = (ln, start, end) => {
+    const [sx, sy] = ln.S, [ex, ey] = ln.E;
+    const W = Math.max(Math.abs(ex - sx), 0.01), H = Math.max(Math.abs(ey - sy), 0.01);
+    const x0 = Math.min(sx, ex), y0 = Math.min(sy, ey);
+    const down = ey > sy, leftward = ex < sx;
+    const cx = (sx + ex) / 2, cy = (sy + ey) / 2;
+    let prst, xf, av = "";
+    if (ln.route === "straight") { prst = "straightConnector1"; xf = xfrm(x0, y0, Math.abs(ex - sx), Math.abs(ey - sy), flips(leftward, !down && ey !== sy)); }
+    else if (ln.route === "h3") { prst = "bentConnector3"; xf = xfrm(x0, y0, W, H, flips(leftward, !down)); av = adj("adj1", Math.abs(ln.mx - sx) / W); }
+    else if (ln.route === "h2") { prst = "bentConnector2"; xf = xfrm(x0, y0, W, H, flips(leftward, !down)); }
+    else if (ln.route === "j4") {
+      prst = "bentConnector4"; xf = xfrm(x0, y0, W, H, flips(leftward, !down));
+      av = adj("adj1", (leftward ? sx - ln.lx : ln.lx - sx) / W) + adj("adj2", (!down ? sy - ln.gy : ln.gy - sy) / H);
+    } else {
+      // 縦から始まる形は、横から始まる形を 90° 回して作る
+      prst = ln.route === "v2" ? "bentConnector2" : "bentConnector3";
+      xf = xfrm(cx - H / 2, cy - W / 2, H, W, flips(!down, !leftward, 5400000));
+      if (ln.route === "v3") av = adj("adj1", Math.abs(ln.my - sy) / H);
+    }
+    return `<p:cxnSp><p:nvCxnSpPr><p:cNvPr id="${id}" name="矢印 ${id++}"/><p:cNvCxnSpPr>` +
+      `${start ? `<a:stCxn id="${start[0]}" idx="${start[1]}"/>` : ""}${end ? `<a:endCxn id="${end[0]}" idx="${end[1]}"/>` : ""}</p:cNvCxnSpPr><p:nvPr/></p:nvCxnSpPr>` +
+      `<p:spPr>${xf}<a:prstGeom prst="${prst}"><a:avLst>${av}</a:avLst></a:prstGeom>` +
+      `<a:noFill/>${lnXml(st.arrow, ln.dashed ? Math.max(0.75, st.lineW * 0.75) : st.lineW, ln.arrow, ln.dashed)}</p:spPr></p:cxnSp>`;
+  };
+
+  const ids = [], dotIds = [], noteIds = [];
+  const dotXml = (d, di) => {
+    const r = L.dotR;
+    dotIds[di] = id;
+    return `<p:sp><p:nvSpPr><p:cNvPr id="${id}" name="点 ${id++}"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr><p:spPr>${xfrm(d.x - r, d.y - r, r * 2, r * 2)}` +
+      `<a:prstGeom prst="ellipse"><a:avLst/></a:prstGeom><a:solidFill><a:srgbClr val="${st.arrow}"/></a:solidFill><a:ln><a:noFill/></a:ln></p:spPr></p:sp>`;
+  };
+  const noteXml = (nt, ni) => { noteIds[ni] = id; return shapeXml(nt, "照査・打合せ", "rect", st.notes[nt.cat], st.proc[1]); };
+  const dotOf = ln => [dotIds[L.dots.indexOf(ln.dot)], 0];
+  const noteLineXml = ln => connXml(ln, dotOf(ln), [noteIds[L.notes.indexOf(ln.b)], 1]);
+  const done = new Set();   // もう書いた点・線
+
+  // 箱ごとに、その箱に付いている点と照査・打合せ（と破線）を集める
+  const own = {};
+  L.dots.forEach((d, di) => {
+    if (d.owner !== undefined && L.nodes[d.owner] && isShape(L.nodes[d.owner])) (own[d.owner] = own[d.owner] || []).push(di);
+  });
+
+  L.nodes.forEach((n, i) => {
+    if (n.kind === "bar") {
+      const W = n.x2 - n.x1;
+      out.push(`<p:sp><p:nvSpPr><p:cNvPr id="${id}" name="${n.join ? "合流" : "同時進行"} ${id++}"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr><p:spPr>${xfrm(n.x1, topOf(n), W, n.h)}` +
+        `<a:custGeom><a:avLst/><a:gdLst/><a:ahLst/><a:cxnLst/><a:rect l="0" t="0" r="r" b="b"/><a:pathLst><a:path w="${Math.max(1, EMU(W))}" h="${Math.max(1, EMU(n.h))}" fill="none">` +
+        `<a:moveTo><a:pt x="0" y="0"/></a:moveTo><a:lnTo><a:pt x="${EMU(W)}" y="0"/></a:lnTo><a:moveTo><a:pt x="0" y="${EMU(n.h)}"/></a:moveTo><a:lnTo><a:pt x="${EMU(W)}" y="${EMU(n.h)}"/></a:lnTo>` +
+        `</a:path></a:pathLst></a:custGeom><a:noFill/>${lnXml(st.arrow, st.lineW, false, false)}</p:spPr></p:sp>`);
+      return;
+    }
+    let xml;
+    if (!hasSubs(n)) {
+      ids[i] = id;
+      const [fill, line] = st[n.look];
+      xml = shapeXml(n, kindName[n.kind], geom[n.look], fill, line);
+    } else {
+      // 小項目つき：外枠・見出し・小項目・中の矢印を 1 つのグループにする（まとめて動く）
+      const gid = id++;
+      ids[i] = id;
+      const parts = [shapeXml(Object.assign({}, n, { label: undefined }), "外枠", "rect", st.body, st.proc[1])];
+      parts.push(shapeXml(n.head, "見出し", "rect", st.head, st.proc[1]));
+      const subIds = n.subBoxes.map(b => { const sid = id; parts.push(shapeXml(b, "小項目", "rect", st.sub[0], st.sub[1], "l")); return sid; });
+      for (const ln of L.lines) if (ln.type === "sub" && ln.owner === n) parts.push(connXml(ln, [subIds[ln.a], 2], [subIds[ln.b], 0]));
+      const off = `<a:off x="${EMU(n.x - n.w / 2)}" y="${EMU(topOf(n))}"/><a:ext cx="${EMU(n.w)}" cy="${EMU(n.h)}"/>`;
+      xml = `<p:grpSp><p:nvGrpSpPr><p:cNvPr id="${gid}" name="${esc(n.label)}"/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>` +
+        `<p:grpSpPr><a:xfrm>${off}${off.replace("a:off", "a:chOff").replace("a:ext", "a:chExt")}</a:xfrm></p:grpSpPr>${parts.join("")}</p:grpSp>`;
+    }
+    if (!own[i]) { out.push(xml); return; }
+
+    // 箱と、その箱に付いている点・照査打合せを 1 つにまとめる（PowerPoint で箱を動かすと一緒に動く）
+    const parts = [xml];
+    let x1 = n.x - n.w / 2, y1 = topOf(n), x2 = n.x + n.w / 2, y2 = bottomOf(n);
+    const grow = (ax, ay, bx, by) => { x1 = Math.min(x1, ax); y1 = Math.min(y1, ay); x2 = Math.max(x2, bx); y2 = Math.max(y2, by); };
+    for (const di of own[i]) {
+      const d = L.dots[di], r = L.dotR;
+      parts.push(dotXml(d, di));
+      grow(d.x - r, d.y - r, d.x + r, d.y + r);
+      const nls = L.lines.filter(l => l.type === "note" && l.dot === d);
+      for (const l of nls) {
+        const nt = l.b, ni = L.notes.indexOf(nt);
+        if (noteIds[ni] === undefined) { parts.push(noteXml(nt, ni)); grow(nt.x - nt.w / 2, topOf(nt), nt.x + nt.w / 2, bottomOf(nt)); }
+      }
+      for (const l of nls) {
+        parts.push(noteLineXml(l));
+        done.add(l);
+        for (const q of l.pts) grow(q[0], q[1], q[0], q[1]);
+      }
+    }
+    const gid = id++;
+    const off = `<a:off x="${EMU(x1)}" y="${EMU(y1)}"/><a:ext cx="${EMU(x2 - x1)}" cy="${EMU(y2 - y1)}"/>`;
+    out.push(`<p:grpSp><p:nvGrpSpPr><p:cNvPr id="${gid}" name="${esc(n.label)}（照査・打合せ付き）"/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>` +
+      `<p:grpSpPr><a:xfrm>${off}${off.replace("a:off", "a:chOff").replace("a:ext", "a:chExt")}</a:xfrm></p:grpSpPr>${parts.join("")}</p:grpSp>`);
+  });
+  // どの箱にも付いていない点・照査打合せ
+  L.dots.forEach((d, di) => { if (dotIds[di] === undefined) out.push(dotXml(d, di)); });
+  L.notes.forEach((nt, ni) => { if (noteIds[ni] === undefined) out.push(noteXml(nt, ni)); });
+
+  const SITES = { down: [2, 0], merge: [2, 0], right: [3, 1], jump: [3, 0] };
+  for (const ln of L.lines) {
+    if (ln.type === "sub" || done.has(ln)) continue;
+    if (ln.type === "note") { out.push(noteLineXml(ln)); continue; }
+    if (ln.type === "branch") { out.push(connXml(ln, dotOf(ln), [ids[ln.b], 0])); continue; }
+    if (ln.type === "rejoin") { out.push(connXml(ln, [ids[ln.a], 2], dotOf(ln))); continue; }
+    const [sa, sb] = ln.sites || SITES[ln.type];
+    const glue = (v, site) => (v >= 0 && L.nodes[v].kind !== "bar" ? [ids[v], site] : null);
+    // 横にずらした矢印も箱にくっつけておく（PowerPoint で箱を動かしても置いていかれない）
+    out.push(connXml(ln, glue(ln.a, sa), glue(ln.b, sb)));
+  }
+  if (L.title) {
+    const t = L.title;
+    out.push(`<p:sp><p:nvSpPr><p:cNvPr id="${id}" name="タイトル ${id++}"/><p:cNvSpPr txBox="1"/><p:nvPr/></p:nvSpPr><p:spPr>${xfrm(t.x, t.y, L.W - t.x * 2, t.fs * 1.6)}<a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:noFill/></p:spPr>` +
+      `<p:txBody><a:bodyPr wrap="square" lIns="0" tIns="0" rIns="0" bIns="0" rtlCol="0" anchor="t"><a:noAutofit/></a:bodyPr><a:lstStyle/>` +
+      `<a:p><a:pPr algn="l"/>${runXml(t.text, t.fs, st.text, font).replace("<a:rPr ", '<a:rPr b="1" ')}</a:p></p:txBody></p:sp>`);
+  }
+
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+    `<p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">` +
+    `<p:cSld><p:spTree><p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>` +
+    `<p:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/><a:chOff x="0" y="0"/><a:chExt cx="0" cy="0"/></a:xfrm></p:grpSpPr>` +
+    `${out.join("")}</p:spTree></p:cSld><p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr></p:sld>`;
+}
+
+function pptxParts(L, st, font) {
+  const parts = Object.assign({}, TEMPLATE);
+  const cx = EMU(L.W), cy = EMU(L.H), kx = cx / 9144000, ky = cy / 6858000;
+  parts["ppt/presentation.xml"] = parts["ppt/presentation.xml"].replace(/<p:sldSz[^>]*\/>/, `<p:sldSz cx="${cx}" cy="${cy}"/>`);
+  for (const k of Object.keys(parts)) {
+    if (!/^ppt\/(slideMasters|slideLayouts)\/[^/]+\.xml$/.test(k)) continue;
+    parts[k] = parts[k].replace(/<a:off x="(-?\d+)" y="(-?\d+)"\/><a:ext cx="(\d+)" cy="(\d+)"\/>/g,
+      (m, x, y, w, h) => `<a:off x="${Math.round(x * kx)}" y="${Math.round(y * ky)}"/><a:ext cx="${Math.round(w * kx)}" cy="${Math.round(h * ky)}"/>`);
+  }
+  parts["ppt/slides/slide1.xml"] = slideXml(L, st, font);
+  parts["ppt/slides/_rels/slide1.xml.rels"] = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout" Target="../slideLayouts/slideLayout7.xml"/></Relationships>`;
+  return parts;
+}
+
+// ---------- ZIP（無圧縮） ----------
+const CRC_TABLE = (() => { const t = new Uint32Array(256); for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; t[n] = c >>> 0; } return t; })();
+function crc32(b) { let c = 0xFFFFFFFF; for (let i = 0; i < b.length; i++) c = CRC_TABLE[(c ^ b[i]) & 0xFF] ^ (c >>> 8); return (c ^ 0xFFFFFFFF) >>> 0; }
+function zipBytes(files) {
+  const enc = new TextEncoder(), chunks = [], central = [];
+  let offset = 0;
+  const names = Object.keys(files).sort((a, b) => (a === "[Content_Types].xml" ? -1 : b === "[Content_Types].xml" ? 1 : 0));
+  for (const name of names) {
+    const data = enc.encode(files[name]), nb = enc.encode(name), crc = crc32(data);
+    const h = new DataView(new ArrayBuffer(30));
+    h.setUint32(0, 0x04034b50, true); h.setUint16(4, 20, true); h.setUint16(6, 0x0800, true); h.setUint16(8, 0, true);
+    h.setUint16(10, 0, true); h.setUint16(12, 33, true); h.setUint32(14, crc, true);
+    h.setUint32(18, data.length, true); h.setUint32(22, data.length, true); h.setUint16(26, nb.length, true); h.setUint16(28, 0, true);
+    chunks.push(new Uint8Array(h.buffer), nb, data);
+    const c = new DataView(new ArrayBuffer(46));
+    c.setUint32(0, 0x02014b50, true); c.setUint16(4, 20, true); c.setUint16(6, 20, true); c.setUint16(8, 0x0800, true);
+    c.setUint16(10, 0, true); c.setUint16(12, 0, true); c.setUint16(14, 33, true); c.setUint32(16, crc, true);
+    c.setUint32(20, data.length, true); c.setUint32(24, data.length, true); c.setUint16(28, nb.length, true);
+    c.setUint32(42, offset, true);
+    central.push(new Uint8Array(c.buffer), nb);
+    offset += 30 + nb.length + data.length;
+  }
+  const cdSize = central.reduce((s, a) => s + a.length, 0);
+  const e = new DataView(new ArrayBuffer(22));
+  e.setUint32(0, 0x06054b50, true); e.setUint16(8, names.length, true); e.setUint16(10, names.length, true);
+  e.setUint32(12, cdSize, true); e.setUint32(16, offset, true);
+  const all = chunks.concat(central, [new Uint8Array(e.buffer)]);
+  const out = new Uint8Array(all.reduce((s, a) => s + a.length, 0));
+  let p = 0; for (const a of all) { out.set(a, p); p += a.length; }
+  return out;
+}
+
+// ---------- 画面 ----------
+const $ = id => document.getElementById(id);
+const ta = $("src"), gutter = $("gutter"), paper = $("paper"), msgsEl = $("msgs");
+const optIds = ["optSize", "optStyle", "optFont", "optShape", "optTitle"];
+let state = null;
+let offsets = {};   // ドラッグで動かした量（図形ごと、pt）
+let rewires = {};   // 付け替えた矢印（矢印ごと、はし → 箱）
+let lineStyles = {};   // 線ごとの実線・点線
+let selWire = null;    // 選んでいる線
+
+function options() {
+  return {
+    size: $("optSize").value, style: $("optStyle").value, font: $("optFont").value,
+    shape: $("optShape").value || "same", num: true, title: clean($("optTitle").value), offsets, rewires, lineStyles,
+  };
+}
+
+// ---------- 行の見分け ----------
+// 各行に見えない番号を付けて、書き換え・行の追加や削除のあとも同じ行として追いかける
+let lineIds = [], prevLines = [];
+const newId = () => Math.random().toString(36).slice(2, 9);
+function syncIds() {
+  const N = ta.value.replace(/\r\n?/g, "\n").split("\n"), O = prevLines;
+  if (O.length !== lineIds.length) { lineIds = N.map(newId); prevLines = N; return; }
+  let p = 0;
+  while (p < O.length && p < N.length && O[p] === N[p]) p++;
+  let q = 0;
+  while (q < O.length - p && q < N.length - p && O[O.length - 1 - q] === N[N.length - 1 - q]) q++;
+  const oldMid = lineIds.slice(p, O.length - q), mid = [];
+  for (let k = 0; k < N.length - q - p; k++) mid.push(k < oldMid.length ? oldMid[k] : newId());
+  lineIds = lineIds.slice(0, p).concat(mid, lineIds.slice(O.length - q));
+  prevLines = N;
+}
+
+function update() {
+  const o = options();
+  syncIds();
+  const { units, sides, lineInfo } = parse(ta.value, o.num, lineIds);
+  const g = buildGraph(units, sides);
+  const L = layout(g, o);
+  const st = STYLES[o.style];
+  state = { L, st, o, g, lineInfo };
+
+  const errLines = new Set(g.msgs.filter(m => m.level === "warn").map(m => m.line));
+  gutter.innerHTML = lineInfo.map((li, i) => {
+    const kind = li.type === "step" || (li.type === "lane" && li.n) ? "step" : ["lane", "sub", "memo", "side"].includes(li.type) ? "lane" : "";
+    const cls = [kind, errLines.has(i) ? "err" : ""].join(" ").trim();
+    const label = li.n ? li.n : { lane: "∥", note: "※", sub: "・", memo: "@", side: "＜" }[li.type] || "";
+    return `<div${cls ? ` class="${cls}"` : ""}>${label}</div>`;
+  }).join("");
+  gutter.scrollTop = ta.scrollTop;
+
+  msgsEl.innerHTML = g.msgs.map(m =>
+    `<div class="m ${m.level}">${m.line >= 0 ? `<b>${m.line + 1} 行目</b>` : ""}<span>${esc(m.text)}</span></div>`).join("");
+
+  paper.style.aspectRatio = `${L.W} / ${L.H}`;
+  paper.style.width = `${baseWidth() * zoom}px`;
+  paper.innerHTML = svgOf(L, st, false);
+
+  const jumps = g.edges.filter(e => e.type === "jump" || e.type === "merge").length;
+  const decs = units.filter(u => u.kind === "dec").length;
+  const pars = units.filter(u => u.kind === "block").length + sides.length;
+  $("stats").innerHTML = g.M
+    ? `手順 <span class="n">${g.M}</span>　判断 <span class="n">${decs}</span>　同時進行 <span class="n">${pars}</span>　合流・戻り <span class="n">${jumps}</span>`
+    : "手順はまだありません";
+  $("btnReset").hidden = !L.moved;
+  $("btnShowLines").hidden = !L.hiddenLines;
+  markCurrent();
+  save();
+}
+
+function lineAt(pos) { return ta.value.slice(0, pos).split("\n").length - 1; }
+function markCurrent() {
+  const line = lineAt(ta.selectionStart);
+  paper.querySelectorAll(".node").forEach(el => el.classList.toggle("cur", document.activeElement === ta && +el.dataset.line === line));
+}
+
+function save() {
+  try {
+    const o = { src: ta.value, offsets, rewires, lineIds, lineStyles };
+    optIds.forEach(id => { o[id] = $(id).value; });
+    localStorage.setItem("fc-tool-v1", JSON.stringify(o));
+  } catch (e) { /* 保存できなくても動く */ }
+}
+function load() {
+  let o = null;
+  try { o = JSON.parse(localStorage.getItem("fc-tool-v1") || "null"); } catch (e) { o = null; }
+  ta.value = o && typeof o.src === "string" ? o.src : SAMPLES.word;
+  if (o) optIds.forEach(id => { if (typeof o[id] === "string") $(id).value = o[id]; });
+  if (o && o.offsets && typeof o.offsets === "object") offsets = o.offsets;
+  if (o && o.rewires && typeof o.rewires === "object") rewires = o.rewires;
+  if (o && o.lineStyles && typeof o.lineStyles === "object") lineStyles = o.lineStyles;
+  if (o && Array.isArray(o.lineIds) && o.lineIds.length === ta.value.split("\n").length) {
+    lineIds = o.lineIds;
+    prevLines = ta.value.split("\n");
+  }
+  if (!$("optShape").value) $("optShape").value = "same";
+  if (!o) { $("optSize").value = "a4p"; $("optStyle").value = "gyomu"; }
+  if (!$("optSize").value) $("optSize").value = "w169";
+  if (!$("optStyle").value) $("optStyle").value = "gyomu";
+  if (!$("optFont").value) $("optFont").value = "meiryoui";
+}
+
+let toastTimer = 0;
+function toast(text, actionLabel, action) {
+  const t = $("toast");
+  t.innerHTML = `<span>${esc(text)}</span>${actionLabel ? `<button type="button">${esc(actionLabel)}</button>` : ""}`;
+  if (actionLabel) t.querySelector("button").onclick = () => { t.hidden = true; action(); };
+  t.hidden = false;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { t.hidden = true; }, actionLabel ? 8000 : 4000);
+}
+
+async function saveFile(name, blob) {
+  if (window.claude && typeof window.claude.use === "function") {
+    const dl = await window.claude.use("downloads");
+    if (dl) {
+      try { await dl.save({ filename: name, data: blob }); return true; }
+      catch (e) { if (e && e.code === "declined") return false; throw e; }
+    }
+  }
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = name;
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 2000);
+  return true;
+}
+function baseName() {
+  const t = state.o.title || "フローチャート";
+  return t.replace(/[\\/:*?"<>|]/g, "_").slice(0, 60);
+}
+
+async function savePptx() {
+  if (!state.g.M) { toast("先に左の「手順」を書いてください。"); return; }
+  const parts = pptxParts(state.L, state.st, FONTS[state.o.font][0]);
+  const blob = new Blob([zipBytes(parts)], { type: "application/vnd.openxmlformats-officedocument.presentationml.presentation" });
+  try {
+    if (await saveFile(baseName() + ".pptx", blob)) toast("保存しました。開くと四角や矢印をそのまま編集できます。");
+  } catch (e) {
+    toast("保存できませんでした。もう一度押してみてください。");
+  }
+}
+
+function pngBlob() {
+  return new Promise((resolve, reject) => {
+    const L = state.L, scale = 2;
+    const img = new Image();
+    img.onload = () => {
+      const cv = document.createElement("canvas");
+      cv.width = L.W * scale; cv.height = L.H * scale;
+      const cx = cv.getContext("2d");
+      cx.fillStyle = "#FFFFFF"; cx.fillRect(0, 0, cv.width, cv.height);
+      cx.drawImage(img, 0, 0, cv.width, cv.height);
+      cv.toBlob(b => (b ? resolve(b) : reject(new Error("png"))), "image/png");
+    };
+    img.onerror = reject;
+    img.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svgOf(L, state.st, true));
+  });
+}
+async function copyImage() {
+  if (!state.g.M) { toast("先に左の「手順」を書いてください。"); return; }
+  const p = pngBlob();
+  try {
+    await navigator.clipboard.write([new ClipboardItem({ "image/png": p })]);
+    toast("画像をコピーしました。PowerPoint で Ctrl+V で貼り付けられます。");
+  } catch (e) {
+    try {
+      if (await saveFile(baseName() + ".png", await p)) toast("コピーできなかったので、画像ファイルとして保存しました。");
+    } catch (e2) {
+      toast("画像を作れませんでした。「PowerPoint で保存」を使ってください。");
+    }
+  }
+}
+
+// 行の追加ボタン
+function lineRange() {
+  const v = ta.value, pos = ta.selectionStart;
+  const s = v.lastIndexOf("\n", pos - 1) + 1;
+  let e = v.indexOf("\n", pos); if (e < 0) e = v.length;
+  return [s, e];
+}
+// from〜to を text に置き換える（Ctrl+Z で戻せる方法を優先）
+function typeAt(from, to, text) {
+  ta.focus();
+  ta.setSelectionRange(from, to);
+  let ok = false;
+  try { ok = document.execCommand("insertText", false, text); } catch (e) { ok = false; }
+  if (!ok) ta.setRangeText(text, from, to, "end");
+}
+function insertLine(text, selFrom, selLen) {
+  const [s, e] = lineRange();
+  let start;
+  if (clean(ta.value.slice(s, e)) === "") { typeAt(s, e, text); start = s; }
+  else { typeAt(e, e, "\n" + text); start = e + 1; }
+  ta.setSelectionRange(start + selFrom, start + selFrom + selLen);
+  update();
+  commit();
+}
+function appendLine(text, selFrom, selLen) {
+  const [, e] = lineRange();
+  typeAt(e, e, text);
+  ta.setSelectionRange(e + selFrom, e + selFrom + selLen);
+  update();
+  commit();
+}
+const INSERTS = {
+  start: () => insertLine("開始", 0, 2),
+  proc: () => insertLine("新しい処理", 0, 5),
+  sub: () => insertLine("・小項目", 1, 3),
+  memo: () => insertLine("@照査、打合せ", 1, 6),
+  meet: () => insertLine("@打合せ", 1, 3),
+  side: () => insertLine("< 並行する作業 > #1", 2, 6),
+  end: () => insertLine("終了", 0, 2),
+};
+document.querySelectorAll("[data-ins]").forEach(b => b.addEventListener("click", () => INSERTS[b.dataset.ins]()));
+
+$("sample").addEventListener("change", e => {
+  const k = e.target.value;
+  e.target.value = "";
+  if (!SAMPLES[k]) return;
+  commit();
+  ta.value = SAMPLES[k];
+  offsets = {};
+  rewires = {};
+  if (k === "word") { $("optSize").value = "a4p"; $("optStyle").value = "gyomu"; }
+  update();
+  commit();
+  toast("サンプルを入れました。", "元に戻す", undo);
+});
+
+// 文字の入力は、手を止めたところで 1 回分として記録する
+let typingTimer = 0;
+ta.addEventListener("input", () => { update(); clearTimeout(typingTimer); typingTimer = setTimeout(commit, 700); });
+ta.addEventListener("scroll", () => { gutter.scrollTop = ta.scrollTop; });
+["keyup", "click", "focus", "blur", "select"].forEach(ev => ta.addEventListener(ev, markCurrent));
+optIds.forEach(id => {
+  const sel = $(id).tagName === "SELECT";
+  $(id).addEventListener(sel ? "change" : "input", () => { update(); if (sel) commit(); });
+  if (!sel) $(id).addEventListener("change", commit);
+});
+
+let picked = null;   // 図をクリックして選んだ行（Delete でまとめて消す）
+function selectLine(line) {
+  const lines = ta.value.split("\n");
+  if (line < 0 || line >= lines.length) return;
+  let s = 0; for (let i = 0; i < line; i++) s += lines[i].length + 1;
+  ta.focus();
+  ta.setSelectionRange(s, s + lines[line].length);
+  picked = { line, start: s, end: s + lines[line].length };
+  const lh = parseFloat(getComputedStyle(ta).lineHeight) || 26;
+  ta.scrollTop = Math.max(0, line * lh - ta.clientHeight / 3);
+  markCurrent();
+}
+
+// 図で選んだ手順を Delete / BackSpace で消す（その下の「・小項目」「@照査…」の行も一緒に）
+ta.addEventListener("keydown", e => {
+  if (!picked || (e.key !== "Delete" && e.key !== "Backspace")) return;
+  if (ta.selectionStart !== picked.start || ta.selectionEnd !== picked.end) { picked = null; return; }
+  e.preventDefault();
+  const lines = ta.value.split("\n"), info = state.lineInfo;
+  let last = picked.line;
+  if (info[picked.line] && ["step", "side"].includes(info[picked.line].type)) {
+    while (last + 1 < lines.length && info[last + 1] && ["sub", "memo"].includes(info[last + 1].type)) last++;
+  }
+  let s = 0; for (let i = 0; i < picked.line; i++) s += lines[i].length + 1;
+  let t = s; for (let i = picked.line; i <= last; i++) t += lines[i].length + 1;
+  if (t > ta.value.length) { t = ta.value.length; if (s > 0) s--; }   // 最後の行は前の改行ごと消す
+  const name = clean(lines[picked.line]);
+  picked = null;
+  typeAt(s, t, "");
+  update();
+  commit();
+  toast(`「${name}」を消しました。`, "元に戻す", undo);
+});
+ta.addEventListener("mousedown", () => { picked = null; });
+
+// 線をクリックすると「実線／点線」を選べる
+const linePop = $("linePop");
+function showLinePop(key, cx, cy) {
+  selWire = key;
+  update();
+  const ln = state.L.lines.find(l => l.key === key);
+  if (!ln) return hideLinePop();
+  linePop.querySelectorAll("[data-ls]").forEach(b => b.classList.toggle("on", (b.dataset.ls === "dashed") === !!ln.dashed));
+  linePop.hidden = false;
+  const box = linePop.parentElement.getBoundingClientRect();
+  const x = Math.min(Math.max(8, cx - box.left + 10), box.width - linePop.offsetWidth - 8);
+  const y = Math.min(Math.max(44, cy - box.top + 12), box.height - linePop.offsetHeight - 8);
+  linePop.style.left = `${x}px`;
+  linePop.style.top = `${y}px`;
+}
+function hideLinePop() {
+  if (linePop.hidden && !selWire) return;
+  linePop.hidden = true;
+  selWire = null;
+  update();
+}
+function deleteWire() {
+  if (!selWire) return;
+  lineStyles[selWire] = "none";
+  linePop.hidden = true;
+  selWire = null;
+  update();
+  commit();
+  toast("線を消しました。", "元に戻す", undo);
+}
+linePop.addEventListener("click", e => {
+  if (e.target.closest("[data-del]")) { deleteWire(); return; }
+  const b = e.target.closest("[data-ls]");
+  if (!b || !selWire) return;
+  lineStyles[selWire] = b.dataset.ls;
+  update();
+  commit();
+  linePop.querySelectorAll("[data-ls]").forEach(x => x.classList.toggle("on", x === b));
+});
+paper.addEventListener("pointerdown", e => { if (selWire && !e.target.closest(".wire")) hideLinePop(); }, true);
+document.addEventListener("keydown", e => {
+  if (!selWire) return;
+  if (e.key === "Escape") hideLinePop();
+  if ((e.key === "Delete" || e.key === "Backspace") && !/^(TEXTAREA|INPUT|SELECT)$/.test(document.activeElement.tagName)) { e.preventDefault(); deleteWire(); }
+});
+$("btnShowLines").addEventListener("click", () => {
+  for (const k of Object.keys(lineStyles)) if (lineStyles[k] === "none") delete lineStyles[k];
+  update();
+  commit();
+  toast("消した線を戻しました。", "元に戻す", undo);
+});
+
+// 図形のドラッグ（少しでも動かしたら移動、動かさなければその行へ）
+let drag = null, dragFrame = 0;
+function svgPoint(e) {
+  const svg = paper.querySelector("svg");
+  const pt = svg.createSVGPoint();
+  pt.x = e.clientX; pt.y = e.clientY;
+  return pt.matrixTransform(svg.getScreenCTM().inverse());
+}
+// ---------- ズーム ----------
+// 「全体」(100%) はプレビュー欄にスライド全体が収まる大きさ。Ctrl+ホイールでも拡大・縮小
+const scroller = $("scroller");
+let zoom = 1, pan = null;
+function baseWidth() {
+  const L = state ? state.L : { W: 960, H: 540 };
+  const avail = Math.max(200, scroller.clientWidth - 44);
+  const byHeight = (window.innerHeight * 0.78 - 44) * L.W / L.H;
+  return L.H > L.W ? Math.max(200, Math.min(avail, byHeight)) : avail;
+}
+function setZoom(z, at) {
+  const r = scroller.getBoundingClientRect();
+  const ax = at ? at.x - r.left : scroller.clientWidth / 2, ay = at ? at.y - r.top : scroller.clientHeight / 2;
+  // 見ている所（マウスの位置）がずれないようにする
+  const fx = (scroller.scrollLeft + ax - paper.offsetLeft) / paper.offsetWidth;
+  const fy = (scroller.scrollTop + ay - paper.offsetTop) / paper.offsetHeight;
+  zoom = Math.min(4, Math.max(0.5, z));
+  paper.style.width = `${baseWidth() * zoom}px`;
+  scroller.scrollLeft = paper.offsetLeft + fx * paper.offsetWidth - ax;
+  scroller.scrollTop = paper.offsetTop + fy * paper.offsetHeight - ay;
+  $("zPct").textContent = `${Math.round(zoom * 100)}%`;
+}
+$("zIn").addEventListener("click", () => setZoom(zoom * 1.25));
+$("zOut").addEventListener("click", () => setZoom(zoom / 1.25));
+$("zFit").addEventListener("click", () => setZoom(1));
+scroller.addEventListener("wheel", e => {
+  if (!e.ctrlKey && !e.metaKey) return;
+  e.preventDefault();
+  setZoom(zoom * Math.exp(-e.deltaY * 0.0015), { x: e.clientX, y: e.clientY });
+}, { passive: false });
+window.addEventListener("resize", () => setZoom(zoom));
+// 拡大中は、何もない所をドラッグすると見る場所を動かせる
+function startPan(e) {
+  pan = { x: e.clientX, y: e.clientY, l: scroller.scrollLeft, t: scroller.scrollTop };
+  scroller.classList.add("panning");
+  e.preventDefault();
+}
+function movePan(e) {
+  scroller.scrollLeft = pan.l - (e.clientX - pan.x);
+  scroller.scrollTop = pan.t - (e.clientY - pan.y);
+}
+
+// 矢印のはしをつかんで、別の箱の上で離すと付け替わる
+let endDrag = null;
+function shapeAt(p) {
+  let hit = null, area = Infinity;
+  state.L.nodes.forEach((n, i) => {
+    if (!isShape(n)) return;
+    if (Math.abs(p.x - n.x) <= n.w / 2 && Math.abs(p.y - n.y) <= n.h / 2 && n.w * n.h < area) { hit = i; area = n.w * n.h; }
+  });
+  return hit;
+}
+function startEndDrag(el, e) {
+  const ln = state.L.lines[+el.dataset.w], end = el.dataset.end;
+  const fixed = end === "b" ? ln.S : ln.E;
+  const svg = paper.querySelector("svg");
+  const ghost = document.createElementNS("http://www.w3.org/2000/svg", "line");
+  ghost.setAttribute("x1", fixed[0]); ghost.setAttribute("y1", fixed[1]);
+  const p = svgPoint(e);
+  ghost.setAttribute("x2", p.x); ghost.setAttribute("y2", p.y);
+  ghost.setAttribute("stroke", "#E0752D"); ghost.setAttribute("stroke-width", "2"); ghost.setAttribute("stroke-dasharray", "5 3");
+  svg.appendChild(ghost);
+  // 揃った向きを示す補助線（縦・横）
+  const guide = () => {
+    const g = document.createElementNS("http://www.w3.org/2000/svg", "line");
+    g.setAttribute("stroke", "#1D6A84"); g.setAttribute("stroke-width", "0.8"); g.setAttribute("stroke-dasharray", "3 3");
+    g.setAttribute("visibility", "hidden");
+    svg.appendChild(g);
+    return g;
+  };
+  el.classList.add("on");
+  endDrag = { ln, end, ghost, gx: guide(), gy: guide(), other: end === "b" ? ln.a : ln.b, target: null };
+  paper.classList.add("dragging");
+  e.preventDefault();
+}
+// 伸ばした先の補正：反対のはしとまっすぐ（縦・横）にそろえるのを優先し、
+// 次にほかの箱の中心・ふちや線の位置にそろえる
+function alignPoint(p, d) {
+  const L = state.L, k = paper.querySelector("svg").getScreenCTM().a;
+  const fixedPt = d.end === "b" ? d.ln.S : d.ln.E, fixedNode = d.end === "b" ? d.ln.a : d.ln.b;
+  const near = (v, list, th) => { let b = null, dist = th; for (const c of list) { const dd = Math.abs(c - v); if (dd < dist) { dist = dd; b = c; } } return b; };
+  const fx = [fixedPt[0]], fy = [fixedPt[1]];
+  if (fixedNode >= 0 && isShape(L.nodes[fixedNode])) { fx.push(L.nodes[fixedNode].x); fy.push(L.nodes[fixedNode].y); }
+  const xs = [], ys = [];
+  for (const n of L.nodes) if (isShape(n)) { xs.push(n.x, n.x - n.w / 2, n.x + n.w / 2); ys.push(n.y, topOf(n), bottomOf(n)); }
+  for (const n of L.notes) { xs.push(n.x, n.x - n.w / 2); ys.push(n.y); }
+  for (const l of L.lines) if (l.key !== d.ln.key) for (const q of l.pts) { xs.push(q[0]); ys.push(q[1]); }
+  const sx = near(p.x, fx, 14 / k) ?? near(p.x, xs, 8 / k);
+  const sy = near(p.y, fy, 14 / k) ?? near(p.y, ys, 8 / k);
+  return { x: sx ?? p.x, y: sy ?? p.y, sx, sy };
+}
+function moveEndDrag(e) {
+  const raw = svgPoint(e);
+  const t = shapeAt(raw);
+  const a = t === null ? alignPoint(raw, endDrag) : { x: raw.x, y: raw.y, sx: null, sy: null };
+  const p = { x: a.x, y: a.y };
+  endDrag.p = p;
+  endDrag.ghost.setAttribute("x2", p.x); endDrag.ghost.setAttribute("y2", p.y);
+  const L = state.L;
+  for (const [g, v, horiz] of [[endDrag.gx, a.sx, false], [endDrag.gy, a.sy, true]]) {
+    g.setAttribute("visibility", v === null || v === undefined ? "hidden" : "visible");
+    if (v === null || v === undefined) continue;
+    if (horiz) { g.setAttribute("x1", 0); g.setAttribute("x2", L.W); g.setAttribute("y1", v); g.setAttribute("y2", v); }
+    else { g.setAttribute("y1", 0); g.setAttribute("y2", L.H); g.setAttribute("x1", v); g.setAttribute("x2", v); }
+  }
+  endDrag.target = t !== null && t !== endDrag.other ? t : null;
+  paper.querySelectorAll(".node.drop").forEach(g => g.classList.remove("drop"));
+  if (endDrag.target !== null) { const g = paper.querySelector(`.node[data-i="${endDrag.target}"]`); if (g) g.classList.add("drop"); }
+}
+function finishEndDrag() {
+  const d = endDrag;
+  endDrag = null;
+  paper.classList.remove("dragging");
+  const prev = rewires[d.ln.key];
+  if (d.target === null) {
+    // 何もない所で離したら、そこまで矢印を伸ばす
+    if (!d.p) { update(); return; }
+    rewires[d.ln.key] = Object.assign({}, prev, { [d.end]: { x: Math.round(d.p.x * 10) / 10, y: Math.round(d.p.y * 10) / 10 } });
+    update();
+    commit();
+    toast(`矢印の${d.end === "b" ? "先" : "根元"}を伸ばしました。`, "元に戻す", undo);
+    return;
+  }
+  const n = state.L.nodes[d.target];
+  rewires[d.ln.key] = Object.assign({}, prev, { [d.end]: n.key });
+  update();
+  commit();
+  toast(`矢印の${d.end === "b" ? "行き先" : "出どころ"}を「${n.label}」にしました。`, "元に戻す", undo);
+}
+
+// 動かす箱の元の位置と、そろえる相手（縦の補助線だけ。横の補正はしない）
+//   ・上下にある箱の中心・左右のふち
+//   ・縦に走る線：箱の上下の辺の真ん中にその線が来るよう、箱の中心をそろえる
+let dragGuides = null;
+function boxInfo(n) {
+  const off = offsets[n.key] || [0, 0];
+  const xs = [], lineXs = [];
+  for (const m of state.L.nodes.concat(state.L.notes)) {
+    if (!isShape(m) || m.key === n.key) continue;
+    xs.push(m.x, m.x - m.w / 2, m.x + m.w / 2);
+  }
+  const idx = state.L.nodes.indexOf(n);
+  for (const ln of state.L.lines) {
+    if (ln.a === idx || ln.b === idx || ln.b === n || ln.owner === n) continue;   // 自分につながる線は一緒に動くので除く
+    for (let k = 0; k < ln.pts.length - 1; k++) {
+      const p = ln.pts[k], q = ln.pts[k + 1];
+      if (Math.abs(p[0] - q[0]) < 0.5 && Math.abs(p[1] - q[1]) > 0.5) lineXs.push(p[0]);
+    }
+  }
+  return { x0: n.x - off[0], y0: n.y - off[1], w: n.w, h: n.h, xs, lineXs, ys: [] };
+}
+
+// 本線の箱をほかの箱の上・下へ動かしたら、手順の欄の行もその順番に並べ替える
+// （その手順の「・小項目」「@照査…」「< 並行」の行も一緒に動かす）。
+// 文章の順番と箱の順番がいつも同じになり、文字を足したときも手順の順番どおりに箱が並ぶ。
+function reorderByDrag(key) {
+  const { g, L, lineInfo } = state;
+  const node = L.nodes.find(n => n.key === key);
+  if (!node || node.side || node.sideLane || node.lane !== undefined || node.kind === "note") return false;
+  const ui = g.units.findIndex((u, i) => u.kind !== "block" && g.entry[i] === node.idx);
+  if (ui < 0) return false;
+  // 動かした箱より上にある手順の数 → 新しい順番
+  const yOf = i => L.nodes[g.entry[i]].y;
+  let to = 0;
+  g.units.forEach((u, i) => { if (i !== ui && yOf(i) < node.y) to++; });
+  if (to === ui) return false;
+
+  const lines = ta.value.split("\n");
+  const blockEnd = start => {
+    let e = start;
+    while (e + 1 < lines.length && lineInfo[e + 1] && ["sub", "memo", "side"].includes(lineInfo[e + 1].type)) e++;
+    return e;
+  };
+  const from = g.units[ui].line, fromEnd = blockEnd(from);
+  const others = g.units.filter((u, i) => i !== ui);
+  // 入れる場所：to 番目の手順の行の前（いちばん下なら最後の手順のかたまりの後ろ）
+  let at = to < others.length ? others[to].line : blockEnd(others[others.length - 1].line) + 1;
+  const moved = lines.slice(from, fromEnd + 1), movedIds = lineIds.slice(from, fromEnd + 1);
+  const restLines = lines.slice(0, from).concat(lines.slice(fromEnd + 1));
+  const restIds = lineIds.slice(0, from).concat(lineIds.slice(fromEnd + 1));
+  if (at > from) at -= moved.length;
+  const newLines = restLines.slice(0, at).concat(moved, restLines.slice(at));
+  lineIds = restIds.slice(0, at).concat(movedIds, restIds.slice(at));
+  prevLines = newLines;
+  ta.value = newLines.join("\n");
+  // 縦の位置は新しい順番の場所に任せる（横にずらした分は残す）
+  const off = offsets[key];
+  if (off) { if (Math.abs(off[0]) < 0.5) delete offsets[key]; else offsets[key] = [off[0], 0]; }
+  update();
+  commit();
+  const now = state.L.nodes.find(n => n.key === key);
+  toast(`「${now ? now.label : node.text}」に並べ替えました（手順の欄も同じ順番です）。`, "元に戻す", undo);
+  return true;
+}
+
+// 一番近い矢印・図形のふちの上の点
+function snapPoint(p, segs) {
+  let best = null, bd = Infinity;
+  for (const [a, b] of segs) {
+    const dx = b[0] - a[0], dy = b[1] - a[1], len2 = dx * dx + dy * dy || 1e-9;
+    const t = Math.max(0, Math.min(1, ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / len2));
+    const q = [a[0] + t * dx, a[1] + t * dy], d = Math.hypot(q[0] - p[0], q[1] - p[1]);
+    if (d < bd) { bd = d; best = q; }
+  }
+  return best && bd < 10 ? best : p;
+}
+paper.addEventListener("pointerdown", e => {
+  const endEl = e.target.closest(".end");
+  if (endEl && e.button === 0) { startEndDrag(endEl, e); return; }
+  const dotEl = e.target.closest(".dot"), wireEl = e.target.closest(".wire");
+  const el = dotEl || e.target.closest(".node") || wireEl;
+  if (!el && e.button === 0 && zoom > 1) { startPan(e); return; }
+  if (!el || e.button > 0) return;
+  const n = dotEl ? state.L.dots[+dotEl.dataset.dot]
+    : wireEl && el === wireEl ? state.L.lines[+wireEl.dataset.w]
+    : el.dataset.note !== undefined ? state.L.notes[+el.dataset.note] : state.L.nodes[+el.dataset.i];
+  drag = {
+    key: n.key, line: el.dataset.line !== undefined ? +el.dataset.line : -1, start: svgPoint(e),
+    base: (offsets[n.key] || [0, 0]).slice(), moved: false, dot: dotEl ? n : null, route: el === wireEl ? n.route : null,
+    wire: el === wireEl, x: e.clientX, y: e.clientY,
+    box: !dotEl && el !== wireEl ? boxInfo(n) : null,
+  };
+  e.preventDefault();
+});
+window.addEventListener("pointermove", e => {
+  if (pan) { movePan(e); return; }
+  if (endDrag) { moveEndDrag(e); return; }
+  if (!drag) return;
+  const p = svgPoint(e), dx = p.x - drag.start.x, dy = p.y - drag.start.y;
+  if (!drag.moved && Math.hypot(dx, dy) < 3) return;
+  drag.moved = true;
+  paper.classList.add("dragging");
+  if (drag.dot) {
+    // 点は矢印や図形のふちの近くに来たら吸い付く
+    const d = drag.dot, q = snapPoint([d.x0 + drag.base[0] + dx, d.y0 + drag.base[1] + dy], state.L.snap);
+    offsets[drag.key] = [q[0] - d.x0, q[1] - d.y0];
+  } else if (drag.wire && !["v3", "h3", "j4"].includes(drag.route)) {
+    // まっすぐな矢印は、傾かないよう片方の向きだけに動かす。元の位置の近くでは元に戻る
+    const ln = state.L.lines.find(l => l.key === drag.key);
+    if (!ln || !ln.edge) return;
+    const vert = drag.vert ?? (drag.vert = Math.abs(ln.S[0] - ln.E[0]) < 0.5);
+    const k = paper.querySelector("svg").getScreenCTM().a;
+    let v = (vert ? drag.base[0] + dx : drag.base[1] + dy);
+    if (Math.abs(v) < 5 / k) v = 0;
+    offsets[drag.key] = vert ? [v, 0] : [0, v];
+  } else if (drag.box) {
+    // 箱は上下の箱の中心・ふちや、縦に走る線にそろうと吸い付き、補助線を出す
+    const b = drag.box, k = paper.querySelector("svg").getScreenCTM().a, th = 8 / k;
+    let ox = drag.base[0] + dx, oy = drag.base[1] + dy;
+    const cx = b.x0 + ox, cy = b.y0 + oy;
+    const fit = (mine, others) => {
+      let best = null;
+      for (const m of mine) for (const o of others) {
+        const dd = o - m;
+        if (Math.abs(dd) < th && (!best || Math.abs(dd) < Math.abs(best.d))) best = { d: dd, at: o };
+      }
+      return best;
+    };
+    // 線を辺の真ん中に通すそろえを優先し、なければ箱どうしでそろえる
+    const fx = fit([cx], b.lineXs) || fit([cx, cx - b.w / 2, cx + b.w / 2], b.xs);
+    const fy = fit([cy], b.ys);
+    if (fx) ox += fx.d;
+    if (fy) oy += fy.d;
+    dragGuides = { x: fx ? fx.at : null, y: fy ? fy.at : null };
+    offsets[drag.key] = [ox, oy];
+  } else {
+    // 線は曲がる向きにだけ動く
+    offsets[drag.key] = [drag.base[0] + (drag.route === "v3" ? 0 : dx), drag.base[1] + (drag.route === "h3" ? 0 : dy)];
+  }
+  if (!dragFrame) dragFrame = requestAnimationFrame(() => { dragFrame = 0; update(); });
+});
+window.addEventListener("pointerup", e => {
+  if (pan) { pan = null; scroller.classList.remove("panning"); return; }
+  if (endDrag) { finishEndDrag(e); return; }
+  if (!drag) return;
+  const d = drag;
+  drag = null;
+  paper.classList.remove("dragging");
+  if (dragGuides) { dragGuides = null; update(); }
+  if (d.moved && !d.dot && !d.wire && d.box && reorderByDrag(d.key)) return;
+  if (d.moved) commit();
+  else if (d.wire) showLinePop(d.key, d.x, d.y);
+  else if (d.line >= 0) selectLine(d.line);
+});
+$("btnReset").addEventListener("click", () => {
+  offsets = {};
+  rewires = {};
+  update();
+  commit();
+  toast("配置と矢印の付け替えを元に戻しました。", "元に戻す", undo);
+});
+
+$("btnSave").addEventListener("click", savePptx);
+$("btnCopy").addEventListener("click", copyImage);
+// ====================================================================
+// 工程表（Excel で保存）
+// 工程表自動作成ツール.xlsm のマクロ（GanttMaker）と同じ決まりで日数を数え、
+// 同じ様式（月を上旬・中旬・下旬に分けた表と塗りつぶしバー）の .xlsx を作る
+// ====================================================================
+
+// ---------- 日付（1970-01-01 からの日数で扱う） ----------
+const DAY_MS = 86400000;
+const dayOf = s => { const m = /^(\d{4})-(\d{1,2})-(\d{1,2})$/.exec(s || ""); return m ? Date.UTC(+m[1], +m[2] - 1, +m[3]) / DAY_MS : null; };
+const isoOf = n => new Date(n * DAY_MS).toISOString().slice(0, 10);
+const ymdOf = n => { const d = new Date(n * DAY_MS); return [d.getUTCFullYear(), d.getUTCMonth() + 1, d.getUTCDate()]; };
+const dowOf = n => new Date(n * DAY_MS).getUTCDay();
+const dayYMD = (y, m, d) => Date.UTC(y, m - 1, d) / DAY_MS;
+const daysInMonth = (y, m) => new Date(Date.UTC(y, m, 0)).getUTCDate();
+const md = n => { const [, m, d] = ymdOf(n); return `${m}/${d}`; };
+// 和暦（Excel の [$-411]ggge"年"m"月"d"日" と同じ書き方）
+function eraOf(n) {
+  const y = ymdOf(n)[0];
+  if (n >= dayYMD(2019, 5, 1)) return ["令和", y - 2018];
+  if (n >= dayYMD(1989, 1, 8)) return ["平成", y - 1988];
+  return ["昭和", y - 1925];
+}
+const jpDate = n => { const [g, e] = eraOf(n), [, m, d] = ymdOf(n); return `${g}${e}年${m}月${d}日`; };
+const jpMonth = n => { const [, e] = eraOf(n), [, m] = ymdOf(n); return `${e}年${m}月`; };
+// 「2026/12/29」「2026年12月29日」「2026-12-29」などを読む
+function looseDay(t) {
+  t = toHalf(clean(t)).replace(/[年月\/.．]/g, "-").replace(/日$/, "");
+  return dayOf(t);
+}
+
+// ---------- 祝日（毎年自動で計算） ----------
+const holCache = {};
+function jpHolidays(y) {
+  if (holCache[y]) return holCache[y];
+  const H = new Map();
+  const add = (m, d, name) => H.set(dayYMD(y, m, d), name);
+  const nthMon = (m, k) => { const f = dayYMD(y, m, 1); return f + ((8 - dowOf(f)) % 7) + (k - 1) * 7; };
+  const t = y - 1980, q = Math.floor(t / 4);
+  add(1, 1, "元日");
+  H.set(nthMon(1, 2), "成人の日");
+  add(2, 11, "建国記念の日");
+  if (y >= 2020) add(2, 23, "天皇誕生日");
+  add(3, Math.floor(20.8431 + 0.242194 * t) - q, "春分の日");
+  add(4, 29, "昭和の日");
+  add(5, 3, "憲法記念日"); add(5, 4, "みどりの日"); add(5, 5, "こどもの日");
+  const moved = { 2020: [[7, 23], [8, 10], [7, 24]], 2021: [[7, 22], [8, 8], [7, 23]] }[y];
+  if (moved) { add(...moved[0], "海の日"); add(...moved[1], "山の日"); add(...moved[2], "スポーツの日"); }
+  else { H.set(nthMon(7, 3), "海の日"); add(8, 11, "山の日"); H.set(nthMon(10, 2), "スポーツの日"); }
+  H.set(nthMon(9, 3), "敬老の日");
+  add(9, Math.floor(23.2488 + 0.242194 * t) - q, "秋分の日");
+  add(11, 3, "文化の日"); add(11, 23, "勤労感謝の日");
+  // 祝日にはさまれた日は国民の休日
+  for (const d of [...H.keys()]) if (H.has(d + 2) && !H.has(d + 1) && dowOf(d + 1) !== 0) H.set(d + 1, "国民の休日");
+  // 日曜の祝日は、次の祝日でない日が振替休日
+  for (const d of [...H.keys()].sort((a, b) => a - b)) {
+    if (dowOf(d) !== 0) continue;
+    let x = d + 1;
+    while (H.has(x)) x++;
+    H.set(x, "振替休日");
+  }
+  return (holCache[y] = H);
+}
+
+// ---------- 入力 ----------
+const HEAD_FIELDS = [
+  ["formNo", "様式番号（左上）", "第２号様式"],
+  ["title", "表題", "工　　　程　　　表"],
+  ["date", "作成日", ""],
+  ["to", "宛先", "○○○○事務所長　殿"],
+  ["preface", "前文", "　　次のとおり業務の工程を設定して表示します。"],
+  ["project", "業務名", "", "令和８年度　○○○○整備業務（その１）"],
+  ["address", "作成者　所在地", "", "○○県○○市○○町１丁目２番３号"],
+  ["company", "作成者　会社名", "", "株式会社○○○○"],
+  ["name", "作成者　名前", "", "代表取締役　○○　○○"],
+  ["manager", "管理者", "", "部　長　○○　○○"],
+  ["staff", "担当者", "", "係　長　○○　○○"],
+  ["contact", "確認先（電話）", "", "０００－０００－００００"],
+];
+const BAR_COLORS = [["000000", "黒"], ["1F3864", "紺"], ["2E75B6", "青"], ["00B0F0", "水色"], ["548235", "緑"],
+  ["BF9000", "黄土"], ["ED7D31", "橙"], ["C00000", "赤"], ["7030A0", "紫"], ["808080", "灰"]];
+const CFG_DEFAULT = { dayMode: "cal", barColor: "000000", barHeight: "35", chgColor: "C00000", oldStyle: "fill", extraOff: "" };
+const ROW_FIELDS = ["name", "s", "e", "d", "cs", "ce", "cd", "color", "note"];
+
+const newRow = (o = {}) => Object.assign({ id: newId(), name: "", s: "", e: "", d: "", cs: "", ce: "", cd: "", color: "", note: "" }, o);
+function defaultSched() {
+  const head = {};
+  HEAD_FIELDS.forEach(([k, , v]) => { head[k] = v; });
+  return { head, cfg: Object.assign({}, CFG_DEFAULT), rows: [], ignoreSync: "" };
+}
+function normalizeSched(o) {
+  const sc = defaultSched();
+  if (!o || typeof o !== "object") return sc;
+  if (o.head && typeof o.head === "object") HEAD_FIELDS.forEach(([k]) => { if (typeof o.head[k] === "string") sc.head[k] = o.head[k]; });
+  if (o.cfg && typeof o.cfg === "object") Object.keys(CFG_DEFAULT).forEach(k => { if (typeof o.cfg[k] === "string") sc.cfg[k] = o.cfg[k]; });
+  if (Array.isArray(o.rows)) sc.rows = o.rows.filter(r => r && typeof r === "object").map(r => {
+    const x = newRow();
+    ROW_FIELDS.forEach(k => { if (r[k] != null) x[k] = String(r[k]); });
+    if (typeof r.id === "string" && r.id) x.id = r.id;
+    return x;
+  });
+  if (typeof o.ignoreSync === "string") sc.ignoreSync = o.ignoreSync;
+  return sc;
+}
+
+// Excel のサンプル（工程表自動作成ツール.xlsm の入力シートと同じ）
+// [作業項目, 開始日, 終了日, 日数, 変更後 開始日, 終了日, 日数, 備考]
+const PLAN_SAMPLE = {
+  head: { project: "令和８年度　○○○○整備業務（その１）○○施設検討業務一式", date: "2026-02-26", address: "○○県○○市○○町１丁目２番３号",
+          company: "株式会社○○○○", name: "代表取締役　○○　○○", manager: "部　長　○○　○○", staff: "係　長　○○　○○", contact: "０００－０００－００００" },
+  rows: [
+    ["1.詳細検討"],
+    ["1.1.計画準備", "2026-03-02", "", "20"],
+    ["1.2.現地踏査", "", "", "15", "", "", "", "日数だけ入力（前の作業の翌日から）"],
+    ["1.3.設計条件の検討", "2026-04-01", "2026-04-30"],
+    ["1.4.基本検討", "2026-05-01", "2026-05-31", "", "", "2026-06-10", "", "終了日を延長"],
+    ["1.5.関連施設の検討", "2026-06-11", "2026-06-30"],
+    ["1.6.施工計画", "2026-07-01", "2026-07-20"],
+    ["1.7.図面作成", "2026-07-21", "2026-08-10", "", "2026-07-27", "", "", "開始日をずらす"],
+    ["1.8.数量計算", "", "2026-08-31", "21"],
+    ["1.9.照査", "2026-03-09", "", "", "", "", "", "3回"],
+    ["", "2026-07-06"],
+    ["", "2026-09-24"],
+    ["1.10.報告書作成", "2026-09-01", "2026-09-30"],
+    ["2.周辺対策検討"],
+    ["2.1.周辺対策の検討", "2026-05-01", "2026-07-10"],
+    ["2.2.前後区間への影響検討", "2026-07-11", "2026-08-10"],
+    ["2.3.対策工の検討", "2026-06-01", "2026-06-20"],
+    ["3.打合せ協議（中間５回・計７回）", "2026-03-16", "", "2"],
+    ["", "2026-04-13", "", "2"],
+    ["", "2026-04-27", "", "2"],
+    ["", "2026-05-18", "", "2", "2026-05-25", "", "", "第4回を延期"],
+    ["", "2026-07-13", "", "2"],
+    ["", "2026-08-17", "", "2"],
+    ["", "2026-09-28", "", "2"],
+  ],
+};
+
+// ---------- 日数の計算（暦日 / 土日祝除く） ----------
+function computeSched(sc) {
+  const work = sc.cfg.dayMode === "work";
+  const extra = new Set(), errors = [];
+  clean(sc.cfg.extraOff || "").split(/[\n,、]+/).map(clean).filter(Boolean).forEach(part => {
+    const [a, b] = part.split(/[〜～~]/).map(looseDay);
+    if (a == null || (part.match(/[〜～~]/) && b == null)) { errors.push({ row: -1, text: `ほかの休み「${part}」を日付として読み取れません（例：2026/12/29〜2027/1/3）。` }); return; }
+    for (let x = a; x <= (b == null ? a : b) && x - a < 400; x++) extra.add(x);
+  });
+  const isOff = n => { const w = dowOf(n); return w === 0 || w === 6 || jpHolidays(ymdOf(n)[0]).has(n) || extra.has(n); };
+  const workDay = (n, k) => { let x = n, c = Math.abs(k); const st = k < 0 ? -1 : 1; while (c > 0) { x += st; if (!isOff(x)) c--; } return x; };
+  const addDays = (s, d) => (work ? workDay(s - 1, d) : s + d - 1);
+  const subDays = (e, d) => (work ? workDay(e + 1, -d) : e - d + 1);
+  const nextStart = e => (work ? workDay(e, 1) : e + 1);
+  const countDays = (s, e) => { if (!work) return e - s + 1; let c = 0; for (let x = s; x <= e; x++) if (!isOff(x)) c++; return c; };
+  const readDays = (v, label, fail) => {
+    v = toHalf(clean(v || ""));
+    if (v === "") return null;
+    const n = Number(v);
+    if (!isFinite(n)) return fail(`${label}は数字で入れてください。`);
+    if (n < 1) return fail(`${label}は 1 以上で入れてください。`);
+    return Math.ceil(n);
+  };
+  const defColor = /^[0-9A-F]{6}$/i.test(sc.cfg.barColor) ? sc.cfg.barColor.toUpperCase() : "000000";
+
+  const items = [], pers = [], rowRes = [];
+  let lastEnd = null;
+  sc.rows.forEach((row, i) => {
+    let bad = false;
+    const fail = text => { if (!bad) errors.push({ row: i, text }); bad = true; return null; };
+    const nm = clean(row.name);
+    let s = dayOf(row.s), e = dayOf(row.e), d = readDays(row.d, "日数", fail);
+    let cs = dayOf(row.cs), ce = dayOf(row.ce), cd = readDays(row.cd, "変更後の日数", fail);
+    const hasS = s != null, hasE = e != null, hasD = d != null, hasCS = cs != null, hasCE = ce != null, hasCD = cd != null;
+    const hasOrig = hasS || hasE || hasD, hasChg = hasCS || hasCE || hasCD;
+    let it = items[items.length - 1], rowColor;
+    if (nm) {
+      it = { name: nm, note: clean(row.note), color: row.color || defColor, days: 0, cdays: 0, hasChg: false, row: i };
+      items.push(it);
+      rowColor = it.color;
+    } else if (hasOrig || hasChg) {
+      if (!it) { fail("作業項目が空です（いちばん上の行には作業項目を入れてください）。"); rowRes[i] = null; return; }
+      rowColor = row.color || it.color;
+      const note = clean(row.note);
+      if (note) it.note = it.note ? `${it.note}、${note}` : note;
+    }
+    if (bad) { rowRes[i] = null; return; }
+
+    // 変更前（当初）の期間
+    if (hasOrig) {
+      if (hasS && hasE) { if (e < s) return fail("終了日が開始日より前になっています。"); }
+      else if (hasS && hasD) e = addDays(s, d);
+      else if (hasE && hasD) s = subDays(e, d);
+      else if (hasD) {
+        if (lastEnd == null) return fail("開始日を入れてください（日数だけの行は、上の作業の翌日から始まります）。");
+        s = nextStart(lastEnd); e = addDays(s, d);
+      } else if (hasS) e = s;
+      else s = e;
+      d = countDays(s, e);
+      lastEnd = e;
+    }
+    // 変更後の期間（足りないところは変更前から補う）
+    if (hasChg) {
+      if (hasCS && hasCE) { /* そのまま */ }
+      else if (hasCS && hasCD) ce = addDays(cs, cd);
+      else if (hasCE && hasCD) cs = subDays(ce, cd);
+      else if (!hasOrig) {
+        if (hasCD) return fail("変更後の開始日か終了日を入れてください。");
+        if (hasCS) ce = cs; else cs = ce;
+      } else if (hasCS) ce = addDays(cs, d < 1 ? 1 : d);   // 日数はそのままでずらす
+      else if (hasCE) cs = s;                                // 開始日はそのまま
+      else { cs = s; ce = addDays(cs, cd); }
+      if (ce < cs) return fail("変更後の終了日が開始日より前になっています。");
+      cd = countDays(cs, ce);
+    }
+    if (!hasOrig && !hasChg) { rowRes[i] = null; return; }
+    pers.push({ item: items.length - 1, hasOrig, s, e, hasChg, cs, ce, color: rowColor });
+    if (hasOrig) it.days += d;
+    if (hasChg) { it.hasChg = true; it.cdays += cd; } else it.cdays += d;
+    rowRes[i] = { hasOrig, s, e, d, hasChg, cs, ce, cd };
+  });
+  return { items, pers, rowRes, errors, work, isOff };
+}
+
+// ---------- 工程表の形（Excel のシートと同じ行・列） ----------
+const GC = { NAME: 1, DAYS: 2, CHART: 3 };
+const GR = { LEGEND: 14, PROJECT: 15, PERIOD: 16, MONTH: 17, TEN: 18, FIRST: 19 };
+const G_ROW_H = 18, G_ROW_H2 = 28;
+// 列幅（文字数）→ Excel が書き込む幅とピクセル（標準フォント Calibri 11 の数字幅 7px）
+function colWidth(chars) {
+  const w = Math.trunc((chars * 7 + 5) / 7 * 256) / 256;
+  return { w, px: Math.trunc((256 * w + Math.trunc(128 / 7)) / 256 * 7) };
+}
+
+function ganttModel(sc, R) {
+  const { items, pers } = R, H = sc.head;
+  const lo = (a, b) => (a == null || b < a ? b : a), hi = (a, b) => (a == null || b > a ? b : a);
+  let minS = null, maxE = null, curS = null, curE = null;
+  for (const p of pers) {
+    if (p.hasOrig) { minS = lo(minS, p.s); maxE = hi(maxE, p.e); }
+    if (p.hasChg) { minS = lo(minS, p.cs); maxE = hi(maxE, p.ce); }
+    curS = lo(curS, p.hasChg ? p.cs : p.s);
+    curE = hi(curE, p.hasChg ? p.ce : p.e);
+  }
+  const anyChg = items.some(it => it.hasChg);
+  const [by, bm] = ymdOf(minS), [ey, em] = ymdOf(maxE);
+  const nMonths = (ey - by) * 12 + em - bm + 1;
+  const last = GC.CHART + nMonths * 3, lastRow = GR.FIRST + items.length - 1;
+  const chars = [0, 40, 6];
+  const colW = Math.min(8, Math.max(2.63, 72 / (nMonths * 3)));
+  for (let c = GC.CHART; c < last; c++) chars[c] = colW;
+  chars[last] = 22;
+  const M = { chars, last, lastRow, rowH: [], cells: new Map(), merges: [], hEdge: new Map(), vEdge: new Map(), shapes: [],
+              months: nMonths, curS, curE, anyChg };
+  for (let r = 1; r <= lastRow; r++) M.rowH[r] = 13.5;
+
+  const cell = (r, c) => { const k = r * 4096 + c; let x = M.cells.get(k); if (!x) M.cells.set(k, x = { r, c }); return x; };
+  const style = (r1, c1, r2, c2, st) => { for (let r = r1; r <= r2; r++) for (let c = c1; c <= c2; c++) Object.assign(cell(r, c), st); };
+  const put = (r, c, val, st) => Object.assign(cell(r, c), val, st || {});
+  const merge = (r1, c1, r2, c2, val, st) => { if (r2 > r1 || c2 > c1) M.merges.push([r1, c1, r2, c2]); if (st) style(r1, c1, r2, c2, st); if (val) put(r1, c1, val); };
+  const S = v => ({ t: "s", v }), N = v => ({ t: "n", v }), D = v => ({ t: "d", v }), MO = v => ({ t: "m", v });
+  const spanStart = (lastC, w) => { let c = lastC, total = chars[c]; while (total < w && c > GC.CHART) { c--; total += chars[c]; } return c; };
+  const spanEnd = (c1, w, maxC) => { let c = c1, total = chars[c]; while (total < w && c < maxC) { c++; total += chars[c]; } return c; };
+  const txt = k => clean(H[k] || "");
+
+  // 表の上（様式番号・表題・作成日・宛先・作成者・前文）
+  if (txt("formNo")) put(1, 1, S(txt("formNo")));
+  merge(3, 1, 3, last, S(H.title || ""), { sz: 16, ha: "center" });
+  M.rowH[3] = 26;
+  const made = dayOf(H.date);
+  merge(4, spanStart(last, 20), 4, last, made != null ? D(made) : H.date ? S(H.date) : null, { ha: "right" });
+  if (txt("to")) put(6, 1, S(txt("to")), { sz: 11 });
+  const ca = spanStart(last, 50);
+  [["address", "作成者　所在地　"], ["company", "　　　　会社名　"], ["name", "　　　　名　前　"],
+   ["manager", "　　　　管理者　"], ["staff", "　　　　担当者　"], ["contact", "　　　　確認先　"]].forEach(([k, label], i) => {
+    if (txt(k)) merge(7 + i, ca, 7 + i, last, S(label + txt(k)), { ha: "left" });
+  });
+  if (H.preface) put(13, 1, S(H.preface));
+  if (anyChg) merge(GR.LEGEND, spanStart(last, 50), GR.LEGEND, last, S("（上段：変更前　下段：変更後）"), { ha: "right", color: R.chgColor });
+
+  // 業務名・開始・終了
+  put(GR.PROJECT, GC.NAME, S("業務名"));
+  merge(GR.PROJECT, GC.DAYS, GR.PROJECT, last, S(txt("project")), { ha: "left", wrap: true });
+  M.rowH[GR.PROJECT] = 30;
+  const c1 = GC.CHART + Math.floor(nMonths * 3 / 2), c2 = spanEnd(c1, 14, last - 1);
+  put(GR.PERIOD, GC.NAME, S("開始年月日"));
+  merge(GR.PERIOD, GC.DAYS, GR.PERIOD, c1 - 1, D(curS), { ha: "center" });
+  merge(GR.PERIOD, c1, GR.PERIOD, c2, S("終了予定年月日"), { ha: "distributed", shrink: true });
+  merge(GR.PERIOD, c2 + 1, GR.PERIOD, last, D(curE), { ha: "center" });
+  style(GR.PROJECT, GC.NAME, GR.PERIOD, GC.NAME, { ha: "distributed", indent: 1 });
+  M.rowH[GR.PERIOD] = 18;
+
+  // 見出し（月・旬）
+  put(GR.MONTH, GC.NAME, S("月別"), { ha: "right" });
+  put(GR.TEN, GC.NAME, S("工種"), { ha: "left" });
+  merge(GR.MONTH, GC.DAYS, GR.TEN, GC.DAYS, S("日数"), { ha: "center" });
+  for (let k = 0; k < nMonths; k++) {
+    const c = GC.CHART + k * 3, y = by + Math.floor((bm - 1 + k) / 12), m = (bm - 1 + k) % 12 + 1;
+    merge(GR.MONTH, c, GR.MONTH, c + 2, MO(dayYMD(y, m, 1)), { ha: "center", shrink: true });
+    put(GR.TEN, c, N(10)); put(GR.TEN, c + 1, N(20));
+  }
+  style(GR.TEN, GC.CHART, GR.TEN, last - 1, { sz: 7, ha: "right" });
+  merge(GR.MONTH, last, GR.TEN, last, S("備　　考"), { ha: "center" });
+  M.rowH[GR.MONTH] = 16;
+  M.rowH[GR.TEN] = 12;
+
+  // 作業の行
+  items.forEach((it, i) => {
+    const r = GR.FIRST + i;
+    put(r, GC.NAME, S(it.name));
+    put(r, last, S(it.note));
+    if (it.hasChg) {
+      M.rowH[r] = G_ROW_H2;
+      put(r, GC.DAYS, { t: "rich", runs: [{ text: it.days > 0 ? String(it.days) : "－" }, { text: String(it.cdays), color: R.chgColor }] }, { wrap: true });
+    } else {
+      M.rowH[r] = G_ROW_H;
+      if (it.days > 0) put(r, GC.DAYS, N(it.days));
+    }
+  });
+  if (items.length) {
+    style(GR.FIRST, GC.NAME, lastRow, GC.NAME, { shrink: true });
+    style(GR.FIRST, last, lastRow, last, { shrink: true });
+    style(GR.FIRST, GC.DAYS, lastRow, GC.DAYS, { ha: "center" });
+  }
+  style(GR.PROJECT, GC.NAME, lastRow, last, { va: "center" });
+
+  // 罫線（月の境は実線、旬の境は点線）
+  const E = (map, r, c, v) => map.set(`${r},${c}`, v);
+  for (let r = GR.PROJECT; r <= lastRow; r++) for (let c = 1; c <= last; c++) {
+    E(M.hEdge, r, c, "thin"); E(M.hEdge, r + 1, c, "thin"); E(M.vEdge, r, c, "thin"); E(M.vEdge, r, c + 1, "thin");
+  }
+  E(M.hEdge, GR.TEN, GC.NAME, "");
+  for (let k = 0; k < nMonths; k++) {
+    const c = GC.CHART + k * 3;
+    E(M.vEdge, GR.TEN, c + 1, ""); E(M.vEdge, GR.TEN, c + 2, "");
+    for (let r = GR.FIRST; r <= lastRow; r++) { E(M.vEdge, r, c + 1, "dotted"); E(M.vEdge, r, c + 2, "dotted"); }
+  }
+
+  // 位置（横はピクセル、縦はポイント）
+  const colX = [0, 0];
+  for (let c = 1; c <= last; c++) colX[c + 1] = colX[c] + colWidth(chars[c]).px;
+  const rowY = [0, 0];
+  for (let r = 1; r <= lastRow; r++) rowY[r + 1] = rowY[r] + M.rowH[r];
+  M.colX = colX; M.rowY = rowY;
+
+  // 「月別／工種」の斜線
+  M.shapes.push({ kind: "line", name: "Diagonal", x1: colX[GC.NAME], x2: colX[GC.NAME + 1], y1: rowY[GR.MONTH], y2: rowY[GR.TEN + 1], color: "000000", w: 0.75 });
+
+  // バー
+  const dateX = (n, atEnd) => {
+    const [y, m, d] = ymdOf(n), mi = (y - by) * 12 + m - bm;
+    const [j, s0, ln] = d <= 10 ? [0, 1, 10] : d <= 20 ? [1, 11, 10] : [2, 21, daysInMonth(y, m) - 20];
+    const c = GC.CHART + mi * 3 + j;
+    return colX[c] + (colX[c + 1] - colX[c]) * (d - s0 + (atEnd ? 1 : 0)) / ln;
+  };
+  const pct0 = parseFloat(toHalf(sc.cfg.barHeight || ""));
+  const barH = G_ROW_H * (pct0 >= 10 && pct0 <= 90 ? pct0 : 35) / 100;
+  const bar = (idx, tag, s, e, yMid, color, look) => {
+    const x1 = dateX(s, false);
+    let x2 = dateX(e, true);
+    if (x2 - x1 < 2 / 0.75) x2 = x1 + 2 / 0.75;
+    if (look === "dash") M.shapes.push({ kind: "line", name: `Bar${idx}${tag}`, x1, x2, y1: yMid, y2: yMid, color, w: barH * 0.6, dash: true });
+    else M.shapes.push({ kind: "rect", name: `Bar${idx}${tag}`, x1, x2, y1: yMid - barH / 2, y2: yMid + barH / 2, color, outline: look === "outline" });
+  };
+  pers.forEach((p, i) => {
+    const it = items[p.item], r = GR.FIRST + p.item, top = rowY[r], ht = M.rowH[r];
+    if (!it.hasChg) bar(i + 1, "", p.s, p.e, top + ht / 2, p.color, "fill");
+    else {
+      if (p.hasOrig) bar(i + 1, "Old", p.s, p.e, top + ht * 0.3, p.color, R.oldStyle);
+      bar(i + 1, "New", p.hasChg ? p.cs : p.s, p.hasChg ? p.ce : p.e, top + ht * 0.72, R.chgColor, "fill");
+    }
+  });
+  return M;
+}
+
+// ---------- 工程表のプレビュー（SVG、単位 pt） ----------
+const G_FONT = '"MS Mincho", "ＭＳ 明朝", "Yu Mincho", "游明朝", "Hiragino Mincho ProN", serif';
+function mergeInfo(M) {
+  const top = new Map(), covered = new Set();
+  for (const m of M.merges) {
+    top.set(m[0] * 4096 + m[1], m);
+    for (let r = m[0]; r <= m[2]; r++) for (let c = m[1]; c <= m[3]; c++) if (r !== m[0] || c !== m[1]) covered.add(r * 4096 + c);
+  }
+  return { top, covered };
+}
+function cellDisplay(cl) {
+  if (cl.t === "d") return jpDate(cl.v);
+  if (cl.t === "m") return jpMonth(cl.v);
+  if (cl.t === "n") return String(cl.v);
+  return cl.v == null ? "" : String(cl.v);
+}
+function ganttSvg(M) {
+  const X = c => M.colX[c] * 0.75, Y = r => M.rowY[r];
+  const W = X(M.last + 1), Ht = Y(M.lastRow + 1);
+  const { top, covered } = mergeInfo(M);
+  const out = [];
+  for (const cl of M.cells.values()) {
+    const k = cl.r * 4096 + cl.c;
+    if (covered.has(k)) continue;
+    const m = top.get(k) || [cl.r, cl.c, cl.r, cl.c];
+    const x1 = X(m[1]), x2 = X(m[3] + 1), y1 = Y(m[0]), y2 = Y(m[2] + 1);
+    const fs0 = cl.sz || 9, fill = cl.color ? `#${cl.color}` : "#000";
+    const pad = 2.2, ind = cl.indent ? cl.indent * fs0 : 0, avail = Math.max(4, x2 - x1 - pad * 2 - ind);
+    const lines = cl.t === "rich" ? cl.runs.map(r => ({ text: r.text, color: r.color })) : [{ text: cellDisplay(cl) }];
+    if (!lines.some(l => l.text)) continue;
+    let fs = fs0;
+    let rows = lines;
+    if (cl.wrap && cl.t !== "rich") rows = wrap(lines[0].text, avail, fs, G_FONT).map(t => ({ text: t }));
+    if (cl.shrink) {
+      const w = Math.max(...rows.map(l => textWidth(l.text, fs, G_FONT)));
+      if (w > avail) fs = fs * avail / w;
+    }
+    const ha = cl.ha || (cl.t === "s" ? "left" : "right");
+    const lh = fs * 1.2;
+    const base0 = cl.va === "center" ? (y1 + y2) / 2 - (rows.length - 1) * lh / 2 + fs * 0.36 : y2 - fs * 0.25 - (rows.length - 1) * lh;
+    rows.forEach((l, i) => {
+      const y = base0 + i * lh, col = l.color ? `#${l.color}` : fill;
+      const attrs = `font-size="${f1(fs)}" fill="${col}"`;
+      if (ha === "distributed") {
+        const chars = Array.from(l.text), a = x1 + pad + ind, b = x2 - pad - ind;
+        if (chars.length < 2) { out.push(`<text x="${f1((a + b) / 2)}" y="${f1(y)}" text-anchor="middle" ${attrs}>${esc(l.text)}</text>`); return; }
+        const cw = chars.map(ch => textWidth(ch, fs, G_FONT)), gap = (b - a - cw.reduce((s, v) => s + v, 0)) / (chars.length - 1);
+        let x = a;
+        chars.forEach((ch, j) => { out.push(`<text x="${f1(x)}" y="${f1(y)}" ${attrs}>${esc(ch)}</text>`); x += cw[j] + Math.max(0, gap); });
+        return;
+      }
+      const [x, anchor] = ha === "center" ? [(x1 + x2) / 2, "middle"] : ha === "right" ? [x2 - pad - ind, "end"] : [x1 + pad + ind, "start"];
+      out.push(`<text x="${f1(x)}" y="${f1(y)}" text-anchor="${anchor}" ${attrs}>${esc(l.text)}</text>`);
+    });
+  }
+  // 罫線（結合したセルの内側は描かない）
+  const inside = (r, c, horiz) => M.merges.some(m => (horiz ? r > m[0] && r <= m[2] && c >= m[1] && c <= m[3] : r >= m[0] && r <= m[2] && c > m[1] && c <= m[3]));
+  const lineOf = (x1, y1, x2, y2, v) => `<line x1="${f1(x1)}" y1="${f1(y1)}" x2="${f1(x2)}" y2="${f1(y2)}" stroke="#000" stroke-width="0.6"${v === "dotted" ? ' stroke-dasharray="0.9 1.4"' : ""}/>`;
+  for (const [key, v] of M.hEdge) { if (!v) continue; const [r, c] = key.split(",").map(Number); if (!inside(r, c, true)) out.push(lineOf(X(c), Y(r), X(c + 1), Y(r), v)); }
+  for (const [key, v] of M.vEdge) { if (!v) continue; const [r, c] = key.split(",").map(Number); if (!inside(r, c, false)) out.push(lineOf(X(c), Y(r), X(c), Y(r + 1), v)); }
+  for (const s of M.shapes) {
+    const x1 = s.x1 * 0.75, x2 = s.x2 * 0.75;
+    if (s.kind === "line") out.push(`<line x1="${f1(x1)}" y1="${f1(s.y1)}" x2="${f1(x2)}" y2="${f1(s.y2)}" stroke="#${s.color}" stroke-width="${f1(s.w)}"${s.dash ? ` stroke-dasharray="${f1(s.w * 4)} ${f1(s.w * 3)}"` : ""}/>`);
+    else out.push(`<rect x="${f1(x1)}" y="${f1(s.y1)}" width="${f1(x2 - x1)}" height="${f1(s.y2 - s.y1)}" fill="${s.outline ? "#FFF" : `#${s.color}`}"${s.outline ? ` stroke="#${s.color}" stroke-width="1"` : ""}/>`);
+  }
+  const m = 8;
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${-m} ${-m} ${f1(W + m * 2)} ${f1(Ht + m * 2)}" font-family='${G_FONT}' style="white-space:pre" role="img" aria-label="工程表のプレビュー"><rect x="${-m}" y="${-m}" width="${f1(W + m * 2)}" height="${f1(Ht + m * 2)}" fill="#FFF"/>${out.join("")}</svg>`;
+}
+
+// ---------- Excel（.xlsx） ----------
+const xesc = s => String(s).replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+const colName = c => { let s = ""; for (; c > 0; c = Math.floor((c - 1) / 26)) s = String.fromCharCode(65 + (c - 1) % 26) + s; return s; };
+const XL_FONT = '<name val="ＭＳ 明朝"/><family val="1"/><charset val="128"/>';
+function xlsxParts(M, sheetName) {
+  const fonts = ['<font><sz val="11"/><name val="Calibri"/><family val="2"/></font>'], fontIx = {};
+  const fontId = (sz, color) => {
+    const k = `${sz}|${color || ""}`;
+    if (!(k in fontIx)) { fontIx[k] = fonts.length; fonts.push(`<font><sz val="${sz}"/>${color ? `<color rgb="FF${color}"/>` : ""}${XL_FONT}</font>`); }
+    return fontIx[k];
+  };
+  const borders = ["<border><left/><right/><top/><bottom/><diagonal/></border>"], borderIx = { "||||": 0 };
+  const side = (tag, v) => (v ? `<${tag} style="${v}"><color indexed="64"/></${tag}>` : `<${tag}/>`);
+  const borderId = (l, r, t, b) => {
+    const k = [l, r, t, b].join("|");
+    if (!(k in borderIx)) { borderIx[k] = borders.length; borders.push(`<border>${side("left", l)}${side("right", r)}${side("top", t)}${side("bottom", b)}<diagonal/></border>`); }
+    return borderIx[k];
+  };
+  const xfs = ['<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>'], xfIx = {};
+  const xfId = (cl, bid) => {
+    const fmt = cl.t === "d" ? 164 : cl.t === "m" ? 165 : 0, fid = fontId(cl.sz || 9, cl.color);
+    const al = [cl.ha && `horizontal="${cl.ha}"`, cl.va && `vertical="${cl.va}"`, cl.wrap && 'wrapText="1"', cl.shrink && 'shrinkToFit="1"', cl.indent && `indent="${cl.indent}"`].filter(Boolean).join(" ");
+    const k = `${fmt}|${fid}|${bid}|${al}`;
+    if (!(k in xfIx)) {
+      xfIx[k] = xfs.length;
+      xfs.push(`<xf numFmtId="${fmt}" fontId="${fid}" fillId="0" borderId="${bid}" xfId="0"${fmt ? ' applyNumberFormat="1"' : ""} applyFont="1"${bid ? ' applyBorder="1"' : ""}${al ? ` applyAlignment="1"><alignment ${al}/></xf>` : "/>"}`);
+    }
+    return xfIx[k];
+  };
+  const edge = (map, r, c) => map.get(`${r},${c}`) || "";
+  const { covered } = mergeInfo(M);
+  // 罫線のあるセルは中身がなくても書く
+  for (const key of [...M.hEdge.keys(), ...M.vEdge.keys()]) {
+    const [r, c] = key.split(",").map(Number);
+    if (r >= 1 && r <= M.lastRow && c >= 1 && c <= M.last && !M.cells.has(r * 4096 + c)) M.cells.set(r * 4096 + c, { r, c });
+  }
+  const byRow = [];
+  for (const cl of M.cells.values()) (byRow[cl.r] = byRow[cl.r] || []).push(cl);
+  const rich = runs => runs.map(r => `<r><rPr><sz val="9"/>${r.color ? `<color rgb="FF${r.color}"/>` : ""}<rFont val="ＭＳ 明朝"/><family val="1"/><charset val="128"/></rPr><t xml:space="preserve">${xesc(r.text)}</t></r>`).join(`<r><rPr><sz val="9"/><rFont val="ＭＳ 明朝"/><family val="1"/><charset val="128"/></rPr><t xml:space="preserve">&#10;</t></r>`);
+  const rowsXml = [];
+  for (let r = 1; r <= M.lastRow; r++) {
+    const cells = (byRow[r] || []).sort((a, b) => a.c - b.c).map(cl => {
+      const ref = `${colName(cl.c)}${r}`;
+      const bid = borderId(edge(M.vEdge, r, cl.c), edge(M.vEdge, r, cl.c + 1), edge(M.hEdge, r, cl.c), edge(M.hEdge, r + 1, cl.c));
+      const s = xfId(cl, bid);
+      if (covered.has(r * 4096 + cl.c) || cl.t == null) return `<c r="${ref}" s="${s}"/>`;
+      if (cl.t === "rich") return `<c r="${ref}" s="${s}" t="inlineStr"><is>${rich(cl.runs)}</is></c>`;
+      if (cl.t === "n") return `<c r="${ref}" s="${s}"><v>${cl.v}</v></c>`;
+      if (cl.t === "d" || cl.t === "m") return `<c r="${ref}" s="${s}"><v>${cl.v + 25569}</v></c>`;
+      if (cl.v === "" || cl.v == null) return `<c r="${ref}" s="${s}"/>`;
+      return `<c r="${ref}" s="${s}" t="inlineStr"><is><t xml:space="preserve">${xesc(cl.v)}</t></is></c>`;
+    });
+    rowsXml.push(`<row r="${r}" ht="${M.rowH[r]}" customHeight="1">${cells.join("")}</row>`);
+  }
+  const cols = [];
+  for (let c = 1; c <= M.last; c++) cols.push(`<col min="${c}" max="${c}" width="${colWidth(M.chars[c]).w}" customWidth="1"/>`);
+  const lastRef = `${colName(M.last)}${M.lastRow}`;
+  const merges = M.merges.map(m => `<mergeCell ref="${colName(m[1])}${m[0]}:${colName(m[3])}${m[2]}"/>`);
+  const inch = 1.5 / 2.54;
+
+  // 図形（バーと斜線）：セル＋セル内のずれで位置を決める
+  const PX = 9525, PT = 12700;
+  const anchorOf = (xpx, ypt) => {
+    let c = 1; while (c < M.last && M.colX[c + 1] <= xpx) c++;
+    let r = 1; while (r < M.lastRow && M.rowY[r + 1] <= ypt) r++;
+    return `<xdr:col>${c - 1}</xdr:col><xdr:colOff>${Math.round((xpx - M.colX[c]) * PX)}</xdr:colOff><xdr:row>${r - 1}</xdr:row><xdr:rowOff>${Math.round((ypt - M.rowY[r]) * PT)}</xdr:rowOff>`;
+  };
+  const anchors = M.shapes.map((s, i) => {
+    const off = `<a:xfrm><a:off x="${Math.round(s.x1 * PX)}" y="${Math.round(s.y1 * PT)}"/><a:ext cx="${Math.round((s.x2 - s.x1) * PX)}" cy="${Math.round((s.y2 - s.y1) * PT)}"/></a:xfrm>`;
+    const fill = `<a:solidFill><a:srgbClr val="${s.color}"/></a:solidFill>`;
+    let body;
+    if (s.kind === "line") {
+      body = `<xdr:cxnSp macro=""><xdr:nvCxnSpPr><xdr:cNvPr id="${i + 2}" name="${s.name}"/><xdr:cNvCxnSpPr/></xdr:nvCxnSpPr><xdr:spPr>${off}<a:prstGeom prst="line"><a:avLst/></a:prstGeom><a:ln w="${Math.round(s.w * PT)}">${fill}${s.dash ? '<a:prstDash val="dash"/>' : ""}</a:ln></xdr:spPr></xdr:cxnSp>`;
+    } else {
+      const look = s.outline ? `<a:solidFill><a:srgbClr val="FFFFFF"/></a:solidFill><a:ln w="${PT}">${fill}</a:ln>` : `${fill}<a:ln><a:noFill/></a:ln>`;
+      body = `<xdr:sp macro="" textlink=""><xdr:nvSpPr><xdr:cNvPr id="${i + 2}" name="${s.name}"/><xdr:cNvSpPr/></xdr:nvSpPr><xdr:spPr>${off}<a:prstGeom prst="rect"><a:avLst/></a:prstGeom>${look}</xdr:spPr></xdr:sp>`;
+    }
+    return `<xdr:twoCellAnchor><xdr:from>${anchorOf(s.x1, s.y1)}</xdr:from><xdr:to>${anchorOf(s.x2, s.y2)}</xdr:to>${body}<xdr:clientData/></xdr:twoCellAnchor>`;
+  });
+
+  const X = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n';
+  const NS = 'xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"';
+  const sheet = xesc(sheetName).replace(/'/g, "''");
+  const styles = `${X}<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">`
+    + '<numFmts count="2"><numFmt numFmtId="164" formatCode="[$-411]ggge&quot;年&quot;m&quot;月&quot;d&quot;日&quot;"/><numFmt numFmtId="165" formatCode="[$-411]e&quot;年&quot;m&quot;月&quot;"/></numFmts>'
+    + `<fonts count="${fonts.length}">${fonts.join("")}</fonts>`
+    + '<fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills>'
+    + `<borders count="${borders.length}">${borders.join("")}</borders>`
+    + '<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>'
+    + `<cellXfs count="${xfs.length}">${xfs.join("")}</cellXfs>`
+    + '<cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>';
+  return {
+    "[Content_Types].xml": `${X}<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/><Override PartName="/xl/drawings/drawing1.xml" ContentType="application/vnd.openxmlformats-officedocument.drawing+xml"/></Types>`,
+    "_rels/.rels": `${X}<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>`,
+    "xl/workbook.xml": `${X}<workbook ${NS}><bookViews><workbookView/></bookViews><sheets><sheet name="${xesc(sheetName)}" sheetId="1" r:id="rId1"/></sheets><definedNames><definedName name="_xlnm.Print_Area" localSheetId="0">'${sheet}'!$A$1:$${colName(M.last)}$${M.lastRow}</definedName><definedName name="_xlnm.Print_Titles" localSheetId="0">'${sheet}'!$${GR.PROJECT}:$${GR.TEN}</definedName></definedNames></workbook>`,
+    "xl/_rels/workbook.xml.rels": `${X}<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>`,
+    "xl/styles.xml": styles,
+    "xl/worksheets/sheet1.xml": `${X}<worksheet ${NS}><sheetPr><pageSetUpPr fitToPage="1"/></sheetPr><dimension ref="A1:${lastRef}"/><sheetViews><sheetView showGridLines="0" workbookViewId="0"/></sheetViews><sheetFormatPr defaultColWidth="${colWidth(9).w}" defaultRowHeight="13.5" customHeight="1"/><cols>${cols.join("")}</cols><sheetData>${rowsXml.join("")}</sheetData>${merges.length ? `<mergeCells count="${merges.length}">${merges.join("")}</mergeCells>` : ""}<printOptions horizontalCentered="1"/><pageMargins left="${inch}" right="${inch}" top="${inch}" bottom="${inch}" header="0.3" footer="0.3"/><pageSetup paperSize="9" orientation="landscape" fitToWidth="1" fitToHeight="0"/><drawing r:id="rId1"/></worksheet>`,
+    "xl/worksheets/_rels/sheet1.xml.rels": `${X}<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/drawing" Target="../drawings/drawing1.xml"/></Relationships>`,
+    "xl/drawings/drawing1.xml": `${X}<xdr:wsDr xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">${anchors.join("")}</xdr:wsDr>`,
+  };
+}
+
+// ---------- 画面（工程表） ----------
+let sched = defaultSched();
+let view = "flow";
+let planResult = null;
+const taskRows = $("taskRows");
+
+function planOptions(sc) {
+  const okColor = v => (/^[0-9A-F]{6}$/i.test(v || "") ? v.toUpperCase() : null);
+  return { chgColor: okColor(sc.cfg.chgColor) || "C00000", oldStyle: ["dash", "outline"].includes(sc.cfg.oldStyle) ? sc.cfg.oldStyle : "fill" };
+}
+function computePlan() {
+  const R = computeSched(sched);
+  Object.assign(R, planOptions(sched));
+  R.model = R.pers.length ? ganttModel(sched, R) : null;
+  return R;
+}
+
+// フローチャートの手順 → 作業項目（手順は 1. 2.、小項目は 1.1. 1.2.、照査・打合せは最後にまとめる）
+const ITEM_NUM_RE = /^[0-9０-９]+(?:[.．][0-9０-９]+)*[.．)）、:：]\s*/;
+const itemKey = name => clean(toHalf(clean(name)).replace(/^[0-9]+(?:\.[0-9]+)*[.)）、:：]?\s*/, ""));
+function flowTasks() {
+  const { units, sides } = parse(ta.value, true, lineIds);
+  const out = [], notes = [];
+  const after = new Map();
+  sides.forEach(sd => { const a = after.get(sd.after) || []; a.push(sd); after.set(sd.after, a); });
+  let n = 0;
+  const strip = t => clean(clean(t).replace(ITEM_NUM_RE, ""));
+  const step = st => {
+    if (st.kind !== "proc" || !strip(st.text)) return;
+    n++;
+    out.push(`${n}.${strip(st.text)}`);
+    (st.subs || []).forEach((sb, k) => out.push(`${n}.${k + 1}.${strip(sb.text)}`));
+  };
+  units.forEach(u => {
+    if (u.kind === "block") u.lanes.forEach(l => l.forEach(step));
+    else step(u);
+    (u.notes || []).forEach(nt => nt.items.forEach(t => { t = strip(t); if (t && !notes.includes(t)) notes.push(t); }));
+    (after.get(u) || []).forEach(sd => sd.items.forEach(step));
+  });
+  notes.forEach(t => { n++; out.push(`${n}.${t}`); });
+  return out;
+}
+const flowSignature = () => flowTasks().map(itemKey).join("\n");
+const planSignature = () => sched.rows.filter(r => clean(r.name)).map(r => itemKey(r.name)).join("\n");
+
+function importFlow(silent) {
+  const names = flowTasks();
+  if (!names.length) { if (!silent) toast("フローチャートに手順（四角の箱）がありません。"); return; }
+  commit();
+  // 作業ごとに、その下の「＋期間」の行もまとめて引き継ぐ
+  const groups = [], byKey = new Map();
+  let g = null;
+  sched.rows.forEach(r => {
+    if (clean(r.name) || !g) { g = { head: r, rest: [] }; groups.push(g); if (clean(r.name) && !byKey.has(itemKey(r.name))) byKey.set(itemKey(r.name), g); }
+    else g.rest.push(r);
+  });
+  const used = new Set(), rows = [];
+  names.forEach(nm => {
+    const hit = byKey.get(itemKey(nm));
+    if (hit && !used.has(hit)) { used.add(hit); rows.push(Object.assign(hit.head, { name: nm }), ...hit.rest); }
+    else rows.push(newRow({ name: nm }));
+  });
+  const hasData = r => ["s", "e", "d", "cs", "ce", "cd"].some(k => clean(r[k]));
+  const lost = groups.filter(x => !used.has(x) && [x.head, ...x.rest].some(hasData)).length;
+  sched.rows = rows;
+  sched.ignoreSync = "";
+  renderTasks();
+  planUpdate();
+  commit();
+  if (!silent) toast(lost ? `手順を取り込みました。フローチャートにない作業 ${lost} 件（日付入り）は消えました。` : "フローチャートの手順を取り込みました。入れてあった日付はそのままです。", "元に戻す", undo);
+}
+
+const colorOptions = sel => [`<option value=""${sel ? "" : " selected"}>標準</option>`]
+  .concat(BAR_COLORS.map(([v, n]) => `<option value="${v}"${sel === v ? " selected" : ""}>${n}</option>`)).join("");
+function rowHtml(r, i) {
+  const cont = !clean(r.name) && i > 0;
+  const inp = (k, type, extra = "") => `<input type="${type}" data-k="${k}" value="${esc(r[k])}"${extra}>`;
+  return `<tr data-id="${r.id}"${cont ? ' class="cont"' : ""}>`
+    + `<td class="no">${i + 1}</td>`
+    + `<td class="name">${inp("name", "text", ` placeholder="${cont ? "（上の作業の別の期間）" : "作業項目"}" aria-label="作業項目"`)}</td>`
+    + `<td>${inp("s", "date", ' aria-label="開始日"')}</td><td>${inp("e", "date", ' aria-label="終了日"')}</td><td>${inp("d", "number", ' min="1" step="1" aria-label="日数"')}</td>`
+    + `<td class="chg">${inp("cs", "date", ' aria-label="変更後の開始日"')}</td><td class="chg">${inp("ce", "date", ' aria-label="変更後の終了日"')}</td><td class="chg">${inp("cd", "number", ' min="1" step="1" aria-label="変更後の日数"')}</td>`
+    + `<td><select data-k="color" class="swatch" aria-label="バー色">${colorOptions(r.color)}</select></td>`
+    + `<td>${inp("note", "text", ' aria-label="備考"')}</td>`
+    + `<td class="res"></td>`
+    + `<td class="ops"><button type="button" data-act="period" title="この作業に別の期間を足す">＋期間</button> <button type="button" data-act="up" title="上へ">↑</button> <button type="button" data-act="down" title="下へ">↓</button> <button type="button" data-act="del" title="この行を消す">×</button></td>`
+    + "</tr>";
+}
+function renderTasks() {
+  taskRows.innerHTML = sched.rows.length ? sched.rows.map(rowHtml).join("")
+    : `<tr><td colspan="12" class="hint" style="padding:14px">作業がありません。「フローチャートの手順を取り込む」か「＋ 作業を追加」で始めてください。</td></tr>`;
+  paintSwatches();
+}
+function paintSwatches() {
+  const def = /^[0-9A-F]{6}$/i.test(sched.cfg.barColor) ? sched.cfg.barColor : "000000";
+  taskRows.querySelectorAll("select.swatch").forEach(s => { s.style.borderLeftColor = `#${s.value || def}`; });
+}
+
+function planUpdate() {
+  const R = computePlan();
+  planResult = R;
+  const bad = new Map(R.errors.filter(e => e.row >= 0).map(e => [e.row, e.text]));
+  [...taskRows.querySelectorAll("tr[data-id]")].forEach((tr, i) => {
+    tr.classList.toggle("bad", bad.has(i));
+    tr.classList.toggle("cont", !clean(sched.rows[i].name) && i > 0);
+    const x = R.rowRes[i], cell = tr.querySelector("td.res");
+    if (!cell) return;
+    if (!x) { cell.textContent = ""; return; }
+    const unit = R.work ? "日（稼働）" : "日";
+    const a = x.hasOrig ? `${md(x.s)}〜${md(x.e)}　${x.d}${unit}` : "";
+    const b = x.hasChg ? `<span class="c">→ ${md(x.cs)}〜${md(x.ce)}　${x.cd}${unit}</span>` : "";
+    cell.innerHTML = [esc(a), b].filter(Boolean).join("<br>");
+  });
+  $("planMsgs").innerHTML = R.errors.map(e =>
+    `<div class="m warn">${e.row >= 0 ? `<b>${e.row + 1} 行目</b>` : ""}<span>${esc(e.text)}</span></div>`).join("");
+
+  const gp = $("gPaper");
+  if (R.model) {
+    gp.innerHTML = ganttSvg(R.model);
+    const M = R.model;
+    $("gStats").innerHTML = `作業 <span class="n">${R.items.length}</span>　バー <span class="n">${R.pers.length}</span>　期間 <span class="n">${jpDate(M.curS)}〜${jpDate(M.curE)}</span>（${M.months} か月）`;
+  } else {
+    gp.innerHTML = `<svg viewBox="0 0 600 120" xmlns="http://www.w3.org/2000/svg"><rect width="600" height="120" fill="#FFF"/><text x="300" y="66" text-anchor="middle" class="empty">開始日・終了日・日数を入れると、ここに工程表ができます</text></svg>`;
+    $("gStats").textContent = "まだバーはありません";
+  }
+  const sig = flowSignature();
+  $("syncNote").hidden = !sched.rows.length || !sig || sig === planSignature() || sig === sched.ignoreSync;
+  savePlan();
+}
+function savePlan() {
+  try { localStorage.setItem("koutei-tool-v1", JSON.stringify(sched)); } catch (e) { /* 保存できなくても動く */ }
+}
+function loadPlan() {
+  let o = null;
+  try { o = JSON.parse(localStorage.getItem("koutei-tool-v1") || "null"); } catch (e) { o = null; }
+  sched = normalizeSched(o);
+}
+
+// 見出し・設定の欄
+function buildFields() {
+  $("headFields").innerHTML = HEAD_FIELDS.map(([k, label, , ph]) => {
+    const type = k === "date" ? "date" : "text";
+    return `<label for="h_${k}">${label}</label><input id="h_${k}" type="${type}" data-h="${k}"${ph ? ` placeholder="${esc(ph)}"` : ""}>`;
+  }).join("");
+  $("cfgFields").innerHTML =
+    `<label for="c_dayMode">日数の数え方</label><select id="c_dayMode" data-c="dayMode"><option value="cal">暦日（カレンダーどおり）</option><option value="work">土日祝除く</option></select>`
+    + `<label for="c_barColor">バーの標準色</label><input id="c_barColor" type="color" data-c="barColor">`
+    + `<span class="note">作業ごとの色は、表の「バー色」で変えられます</span>`
+    + `<label for="c_barHeight">バーの太さ（%）</label><input id="c_barHeight" type="number" min="10" max="90" step="5" data-c="barHeight">`
+    + `<span class="note">行の高さに対する割合（10〜90）</span>`
+    + `<label for="c_chgColor">変更後バーの色</label><input id="c_chgColor" type="color" data-c="chgColor">`
+    + `<label for="c_oldStyle">変更前バーの表示</label><select id="c_oldStyle" data-c="oldStyle"><option value="fill">塗りつぶし</option><option value="dash">点線</option><option value="outline">白抜き</option></select>`
+    + `<span class="note">変更があった作業の、上段（変更前）のバーの描き方</span>`
+    + `<label for="c_extraOff">ほかの休み</label><textarea id="c_extraOff" data-c="extraOff" placeholder="2026/12/29〜2027/1/3&#10;2026/8/13"></textarea>`
+    + `<span class="note">「土日祝除く」のときに休みとして数えない日。祝日は自動で入ります</span>`
+    + `<span class="note holidays" id="holList"></span>`;
+}
+function fillFields() {
+  document.querySelectorAll("[data-h]").forEach(el => { el.value = sched.head[el.dataset.h] || ""; });
+  document.querySelectorAll("[data-c]").forEach(el => {
+    const v = sched.cfg[el.dataset.c] || "";
+    el.value = el.type === "color" ? `#${/^[0-9A-F]{6}$/i.test(v) ? v : "000000"}` : v;
+  });
+  showHolidays();
+}
+function showHolidays() {
+  const R = planResult, M = R && R.model, el = $("holList");
+  if (!M || !R.work) { el.innerHTML = ""; return; }
+  const [y1] = ymdOf(M.curS), [y2] = ymdOf(M.curE), list = [];
+  for (let y = y1; y <= y2; y++) for (const [d, n] of [...jpHolidays(y)].sort((a, b) => a[0] - b[0])) if (d >= M.curS && d <= M.curE) list.push(`${md(d)} ${n}`);
+  el.innerHTML = list.length ? `<details><summary>この期間の祝日（${list.length} 日）</summary>${esc(list.join("、"))}</details>` : "";
+}
+function onField(e) {
+  const el = e.target;
+  if (el.dataset.h) sched.head[el.dataset.h] = el.value;
+  else if (el.dataset.c) {
+    sched.cfg[el.dataset.c] = el.type === "color" ? el.value.replace("#", "").toUpperCase() : el.value;
+    if (el.dataset.c === "barColor") paintSwatches();
+  } else return;
+  planUpdate();
+  showHolidays();
+}
+["headFields", "cfgFields"].forEach(id => {
+  $(id).addEventListener("input", onField);
+  $(id).addEventListener("change", e => { onField(e); commit(); });
+});
+
+// 作業の表
+const rowIndexOf = el => { const tr = el.closest("tr[data-id]"); return tr ? sched.rows.findIndex(r => r.id === tr.dataset.id) : -1; };
+let planTimer = 0;
+taskRows.addEventListener("input", e => {
+  const i = rowIndexOf(e.target), k = e.target.dataset.k;
+  if (i < 0 || !k) return;
+  sched.rows[i][k] = e.target.value;
+  if (k === "color") paintSwatches();
+  clearTimeout(planTimer);
+  planTimer = setTimeout(planUpdate, k === "name" || k === "note" ? 250 : 0);
+});
+taskRows.addEventListener("change", () => { clearTimeout(planTimer); planUpdate(); commit(); });
+taskRows.addEventListener("click", e => {
+  const b = e.target.closest("button[data-act]");
+  if (!b) return;
+  const i = rowIndexOf(b);
+  if (i < 0) return;
+  commit();
+  const rows = sched.rows, act = b.dataset.act;
+  let focus = null;
+  if (act === "period") {
+    // 同じ作業の最後の「別の期間」の下に足す
+    let j = i + 1;
+    while (j < rows.length && !clean(rows[j].name)) j++;
+    const nr = newRow({ color: "" });
+    rows.splice(j, 0, nr);
+    focus = [nr.id, "s"];
+  } else if (act === "up" && i > 0) { [rows[i - 1], rows[i]] = [rows[i], rows[i - 1]]; focus = [rows[i - 1].id, null]; }
+  else if (act === "down" && i < rows.length - 1) { [rows[i + 1], rows[i]] = [rows[i], rows[i + 1]]; focus = [rows[i + 1].id, null]; }
+  else if (act === "del") rows.splice(i, 1);
+  else return;
+  renderTasks();
+  planUpdate();
+  commit();
+  if (focus) {
+    const tr = taskRows.querySelector(`tr[data-id="${focus[0]}"]`);
+    const el = tr && (focus[1] ? tr.querySelector(`[data-k="${focus[1]}"]`) : tr.querySelector(`button[data-act="${act}"]`));
+    if (el) el.focus();
+  }
+  if (act === "del") toast("行を消しました。", "元に戻す", undo);
+});
+$("btnAddRow").addEventListener("click", () => {
+  commit();
+  const nr = newRow();
+  sched.rows.push(nr);
+  renderTasks();
+  planUpdate();
+  commit();
+  const el = taskRows.querySelector(`tr[data-id="${nr.id}"] [data-k="name"]`);
+  if (el) el.focus();
+});
+$("btnImport").addEventListener("click", () => importFlow(false));
+$("btnImport2").addEventListener("click", () => importFlow(false));
+$("btnSyncIgnore").addEventListener("click", () => { sched.ignoreSync = flowSignature(); planUpdate(); commit(); });
+$("planSample").addEventListener("change", e => {
+  const k = e.target.value;
+  e.target.value = "";
+  if (k !== "koutei") return;
+  commit();
+  const sc = defaultSched();
+  Object.assign(sc.head, PLAN_SAMPLE.head);
+  sc.rows = PLAN_SAMPLE.rows.map(a => newRow({ name: a[0] || "", s: a[1] || "", e: a[2] || "", d: a[3] || "", cs: a[4] || "", ce: a[5] || "", cd: a[6] || "", note: a[7] || "" }));
+  sc.ignoreSync = flowSignature();
+  sched = sc;
+  fillFields();
+  renderTasks();
+  planUpdate();
+  showHolidays();
+  commit();
+  toast("サンプルを入れました。", "元に戻す", undo);
+});
+
+function planBaseName() {
+  const t = clean(sched.head.project || "");
+  return ("工程表" + (t ? `_${t}` : "")).replace(/[\\/:*?"<>|]/g, "_").slice(0, 60);
+}
+async function saveXlsx() {
+  const R = computePlan();
+  if (!R.model) { toast("開始日・終了日・日数が入った作業がありません。"); return; }
+  const blob = new Blob([zipBytes(xlsxParts(R.model, "工程表"))], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+  try {
+    if (await saveFile(planBaseName() + ".xlsx", blob))
+      toast(R.errors.length ? "保存しました（赤い行は入っていません。入力を確かめてください）。" : "保存しました。Excel で開くと、表もバーもそのまま直せます。");
+  } catch (e) {
+    toast("保存できませんでした。もう一度押してみてください。");
+  }
+}
+$("btnXlsx").addEventListener("click", saveXlsx);
+
+// ---------- 切り替え ----------
+function setView(v) {
+  view = v === "plan" ? "plan" : "flow";
+  const plan = view === "plan";
+  $("flowView").hidden = plan;
+  $("planView").hidden = !plan;
+  $("tabFlow").setAttribute("aria-selected", String(!plan));
+  $("tabPlan").setAttribute("aria-selected", String(plan));
+  $("btnCopy").hidden = plan;
+  $("btnSave").hidden = plan;
+  $("btnXlsx").hidden = !plan;
+  $("lead").textContent = plan
+    ? "作業と日付を入れると、その場で工程表ができます。Excel（第２号様式）で保存できます。"
+    : "手順を書くと、その場で図ができます。PowerPoint の図形のまま保存できます。";
+  try { localStorage.setItem("fc-koutei-view", view); } catch (e) { /* なくても動く */ }
+  if (plan) {
+    if (!sched.rows.length && flowTasks().length) importFlow(true);
+    planUpdate();
+    showHolidays();
+  } else update();
+}
+$("tabFlow").addEventListener("click", () => setView("flow"));
+$("tabPlan").addEventListener("click", () => setView("plan"));
+$("tabFlow").parentElement.addEventListener("keydown", e => {
+  if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+  setView(view === "plan" ? "flow" : "plan");
+  $(view === "plan" ? "tabPlan" : "tabFlow").focus();
+});
+
+// ---------- 入力をまとめて保存・開く ----------
+function flowData() {
+  const o = { src: ta.value, offsets, rewires, lineIds, lineStyles };
+  optIds.forEach(id => { o[id] = $(id).value; });
+  return o;
+}
+$("btnData").addEventListener("click", async () => {
+  const data = { kind: "flowchart-koutei", version: 1, flow: flowData(), plan: sched };
+  const blob = new Blob([JSON.stringify(data, null, 1)], { type: "application/json" });
+  const t = clean(sched.head.project || "") || clean($("optTitle").value) || "フローチャート・工程表";
+  try {
+    if (await saveFile(`${t.replace(/[\\/:*?"<>|]/g, "_").slice(0, 60)}_入力.json`, blob)) toast("入力を保存しました。「入力を開く」で続きから使えます。");
+  } catch (e) { toast("保存できませんでした。もう一度押してみてください。"); }
+});
+$("btnOpen").addEventListener("click", () => $("fileOpen").click());
+$("fileOpen").addEventListener("change", async e => {
+  const f = e.target.files && e.target.files[0];
+  e.target.value = "";
+  if (!f) return;
+  let o = null;
+  try { o = JSON.parse(await f.text()); } catch (err) { o = null; }
+  if (!o || o.kind !== "flowchart-koutei" || !o.flow || typeof o.flow.src !== "string") { toast("このファイルは開けません。「入力を保存」で作ったファイルを選んでください。"); return; }
+  commit();
+  const fl = o.flow;
+  ta.value = fl.src;
+  optIds.forEach(id => { if (typeof fl[id] === "string") $(id).value = fl[id]; });
+  offsets = fl.offsets && typeof fl.offsets === "object" ? fl.offsets : {};
+  rewires = fl.rewires && typeof fl.rewires === "object" ? fl.rewires : {};
+  lineStyles = fl.lineStyles && typeof fl.lineStyles === "object" ? fl.lineStyles : {};
+  if (Array.isArray(fl.lineIds) && fl.lineIds.length === fl.src.split("\n").length) { lineIds = fl.lineIds; prevLines = fl.src.split("\n"); }
+  else { lineIds = []; prevLines = []; }
+  sched = normalizeSched(o.plan);
+  fillFields();
+  renderTasks();
+  update();
+  planUpdate();
+  showHolidays();
+  commit();
+  toast(`「${f.name}」を開きました。`, "元に戻す", undo);
+});
+
+// ---------- 元に戻す・やり直す ----------
+// 文章・設定・動かした位置・付け替えた矢印・工程表の入力をまとめて 1 回分として記録する（最大 100 回）
+const past = [], future = [];
+let current = "";
+function snapshot() {
+  return JSON.stringify({ src: ta.value, offsets, rewires, lineIds, lineStyles, opts: optIds.map(id => $(id).value), plan: sched });
+}
+function refreshUndo() {
+  $("btnUndo").disabled = !past.length && snapshot() === current;
+  $("btnRedo").disabled = !future.length;
+}
+function commit() {
+  clearTimeout(typingTimer);
+  const now = snapshot();
+  if (now !== current) {
+    past.push(current);
+    if (past.length > 100) past.shift();
+    future.length = 0;
+    current = now;
+  }
+  refreshUndo();
+}
+function restore(snap) {
+  const o = JSON.parse(snap);
+  ta.value = o.src;
+  if (o.lineIds) { lineIds = o.lineIds; prevLines = o.src.split("\n"); }
+  offsets = o.offsets;
+  rewires = o.rewires;
+  lineStyles = o.lineStyles || {};
+  optIds.forEach((id, i) => { $(id).value = o.opts[i]; });
+  if (o.plan) {
+    sched = normalizeSched(o.plan);
+    fillFields();
+    renderTasks();
+    planUpdate();
+  }
+  current = snap;
+  update();
+  refreshUndo();
+}
+function undo() {
+  commit();
+  if (!past.length) return;
+  future.push(current);
+  restore(past.pop());
+  toast("1 つ前に戻しました。", "やり直す", redo);
+}
+function redo() {
+  if (!future.length) return;
+  past.push(current);
+  restore(future.pop());
+  toast("やり直しました。", "元に戻す", undo);
+}
+$("btnUndo").addEventListener("click", undo);
+$("btnRedo").addEventListener("click", redo);
+
+document.addEventListener("keydown", e => {
+  const k = e.key.toLowerCase(), mod = e.ctrlKey || e.metaKey;
+  if (mod && k === "s") { e.preventDefault(); if (view === "plan") saveXlsx(); else savePptx(); return; }
+  // 文字を入力している欄の中では、その欄の Ctrl+Z を使う
+  const inField = /^(TEXTAREA|INPUT|SELECT)$/.test(document.activeElement.tagName);
+  if (mod && !inField && (k === "z" || k === "y")) {
+    e.preventDefault();
+    if (k === "y" || e.shiftKey) redo(); else undo();
+  }
+});
+
+load();
+loadPlan();
+buildFields();
+renderTasks();
+planUpdate();
+fillFields();
+update();
+current = snapshot();
+refreshUndo();
+try { if (localStorage.getItem("fc-koutei-view") === "plan") setView("plan"); } catch (e) { /* なくても動く */ }
+if (document.fonts && document.fonts.ready) document.fonts.ready.then(update);
+</script>
