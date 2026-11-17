@@ -3024,7 +3024,23 @@ const planSignature = () => sched.rows.filter(r => clean(r.name)).map(r => itemK
 // 工程表の作業項目 → フローチャートの手順（「1.」は手順、「1.1.」はすぐ上の手順の小項目）。
 // 同じ名前の箱はそのまま残し、名前を変えた行は同じ箱の名前を変え、増えた行は足し、消した行は消す。
 // 判断（？）・開始・終了・戻りの矢印など、工程表にないものはそのまま。
-const PLAN_NUM_RE = /^([0-9０-９]+)((?:[.．][0-9０-９]+)*)[.．)）、:：]?\s*/;
+const PLAN_NUM_RE = /^([0-9０-９]+)((?:[.．][0-9０-９]+)*)(?:[.．)）、:：]\s*|\s+)/;
+// 作業項目の番号を上から付け直す（「1.」「1.1.」の段はそのまま、番号のない行はさわらない）
+function renumberRows(rows) {
+  const cnt = [];
+  let changed = 0;
+  for (const r of rows) {
+    const name = clean(r.name), m = name.match(PLAN_NUM_RE);
+    if (!m) continue;
+    const depth = 1 + (m[2].match(/[.．]/g) || []).length;
+    cnt.length = depth;
+    for (let d = 0; d < depth - 1; d++) cnt[d] = cnt[d] || 1;   // 親のない「1.1.」なども 1 から
+    cnt[depth - 1] = (cnt[depth - 1] || 0) + 1;
+    const next = `${cnt.join(".")}.${clean(name.slice(m[0].length))}`;
+    if (next !== name) { r.name = next; changed++; }
+  }
+  return changed;
+}
 function planItems() {
   return sched.rows.filter(r => clean(r.name)).map(r => {
     const name = clean(r.name), m = name.match(PLAN_NUM_RE);
@@ -3286,7 +3302,7 @@ taskRows.addEventListener("click", e => {
   if (i < 0) return;
   commit();
   const rows = sched.rows, act = b.dataset.act;
-  let focus = null;
+  let focus = null, renumbered = 0;
   if (act === "period") {
     // 同じ作業の最後の「別の期間」の下に足す
     let j = i + 1;
@@ -3296,7 +3312,7 @@ taskRows.addEventListener("click", e => {
     focus = [nr.id, "s"];
   } else if (act === "up" && i > 0) { [rows[i - 1], rows[i]] = [rows[i], rows[i - 1]]; focus = [rows[i - 1].id, null]; }
   else if (act === "down" && i < rows.length - 1) { [rows[i + 1], rows[i]] = [rows[i], rows[i + 1]]; focus = [rows[i + 1].id, null]; }
-  else if (act === "del") rows.splice(i, 1);
+  else if (act === "del") { rows.splice(i, 1); renumbered = renumberRows(rows); }
   else return;
   renderTasks();
   planUpdate();
@@ -3306,7 +3322,7 @@ taskRows.addEventListener("click", e => {
     const el = tr && (focus[1] ? tr.querySelector(`[data-k="${focus[1]}"]`) : tr.querySelector(`button[data-act="${act}"]`));
     if (el) el.focus();
   }
-  if (act === "del") toast("行を消しました。", "元に戻す", undo);
+  if (act === "del") toast(renumbered ? "行を消して、番号を詰めました。" : "行を消しました。", "元に戻す", undo);
 });
 $("btnAddRow").addEventListener("click", () => {
   commit();
