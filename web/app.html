@@ -3083,6 +3083,24 @@ function planItems() {
     if (it.depth !== 1 || it.per) return;
     for (let j = i + 1; j < items.length && items[j].depth === 2; j++) if (!isNoteItem(items[j])) it.per = it.per && items[j].per ? { s: Math.min(it.per.s, items[j].per.s), e: Math.max(it.per.e, items[j].per.e) } : it.per || items[j].per;
   });
+  // 手順のかたまり（手順と、その小項目・照査打合せ・並行（左）、同時進行は 1 つのかたまり）を開始日の順に並べる。
+  // 日付のないかたまりは、その場所から動かさない
+  const groups = [];
+  let cur = null;
+  items.forEach(it => {
+    const fs = it.fs || {};
+    const joins = cur && (it.depth !== 1 || isNoteItem(it) || fs.kind === "side" || (fs.kind === "lane" && cur.lane === fs.blk));
+    if (!joins) { cur = { items: [], lane: fs.kind === "lane" ? fs.blk : null }; groups.push(cur); }
+    cur.items.push(it);
+  });
+  groups.forEach(gr => {
+    const lead = gr.lane ? gr.items.filter(it => (it.fs || {}).kind === "lane") : [gr.items[0]];
+    const ds = lead.filter(it => it.per && it.depth === 1 && !isNoteItem(it)).map(it => it.per.s);
+    gr.d = ds.length ? Math.min(...ds) : null;
+  });
+  const dated = groups.filter(gr => gr.d !== null), byDate = dated.slice().sort((a, b) => a.d - b.d);
+  let k = 0;
+  items.splice(0, items.length, ...groups.map(gr => (gr.d === null ? gr : byDate[k++])).flatMap(gr => gr.items));
   // 工程表で打った作業で、すぐ上の本線の作業と期間が重なるものは、並行（左）にする（小項目も一緒）
   let main = null;
   items.forEach((it, i) => {
@@ -3140,9 +3158,39 @@ function placeNotes(rows, adds, P, fallback) {
     rows.splice(at, 0, row);
   }
 }
+// フローチャートの手順を、工程表の開始日の順に並べ替える。手順の行から次の手順の行の前までを 1 つのかたまりとして
+// 動かす（小項目・照査打合せ・並行（左）も一緒）。開始・終了・判断・日付のない手順は、その場所から動かさない
+function sortFlowByDate(P) {
+  const { units } = parse(ta.value, true, lineIds);
+  if (units.length < 2) return 0;
+  const start = new Map();
+  P.forEach(p => { if (p.per && p.depth === 1 && !isNoteItem(p) && !start.has(p.key)) start.set(p.key, p.per.s); });
+  const keyOf = t => itemKey(clean(clean(t).replace(ITEM_NUM_RE, "")));
+  const dateOf = u => {
+    if (u.kind === "block") { const ds = u.lanes.flat().map(st => start.get(keyOf(st.text))).filter(d => d !== undefined); return ds.length ? Math.min(...ds) : null; }
+    return u.kind === "proc" && start.has(keyOf(u.text)) ? start.get(keyOf(u.text)) : null;
+  };
+  const lines = ta.value.split("\n");
+  const blocks = units.map((u, i) => ({ d: dateOf(u), from: u.line, to: i + 1 < units.length ? units[i + 1].line : lines.length }));
+  const dated = blocks.filter(b => b.d !== null), byDate = dated.slice().sort((a, b) => a.d - b.d);
+  const moved = byDate.filter((b, i) => b !== dated[i]).length;
+  if (!moved) return 0;
+  let k = 0;
+  const rows = lines.map((t, i) => ({ t, id: lineIds[i] }));
+  const out = rows.slice(0, units[0].line).concat(...blocks.map(b => (b.d === null ? b : byDate[k++])).map(b => rows.slice(b.from, b.to)));
+  ta.value = out.map(r => r.t).join("\n");
+  lineIds = out.map(r => r.id);
+  prevLines = out.map(r => r.t);
+  return moved;
+}
 function exportToFlow() {
-  const FA = flowItems(), PA = planItems();
+  const PA = planItems();
   if (!PA.length) { toast("工程表に作業項目がありません。"); return; }
+  commit();
+  // まず、今ある手順を工程表の開始日の順に並べ替える（「> #番号」は update で付け直される）
+  const sorted = sortFlowByDate(PA);
+  if (sorted) update();
+  const FA = flowItems();
   // 照査・打合せは並び順に関係なく名前で合わせる。ほかの作業は順番どおりに合わせる
   const F = FA.filter(f => !isNoteItem(f)), P = PA.filter(p => !isNoteItem(p));
   // 同じ名前どうしを順番どおりに対応させる（LCS）
@@ -3174,8 +3222,14 @@ function exportToFlow() {
     fOnly.slice(k).forEach(f => ops.push({ f, del: true }));
     pOnly.slice(k).forEach(p => ops.push({ p, add: true }));
   }
-  if (!ops.some(o => o.rename || o.del || o.add)) { toast("フローチャートは、工程表の作業項目と同じです。"); return; }
-  commit();
+  if (!ops.some(o => o.rename || o.del || o.add)) {
+    if (!sorted) { toast("フローチャートは、工程表の作業項目と同じです。"); return; }
+    sched.ignoreSync = "";
+    planUpdate();
+    commit();
+    toast("フローチャートの手順を、工程表の開始日の順に並べ替えました。", "元に戻す", undo);
+    return;
+  }
 
   const { g, lineInfo } = state, units = g.units;
   const blank = !units.length;   // 白紙のフローチャートへの反映（業務フロー（Word の例）と同じ形にする）
@@ -3276,7 +3330,7 @@ function exportToFlow() {
   sched.ignoreSync = "";
   planUpdate();
   commit();
-  const what = [counts.add && `追加 ${counts.add}`, counts.rename && `名前の変更 ${counts.rename}`, counts.del && `削除 ${counts.del}`].filter(Boolean).join("・");
+  const what = [sorted && "開始日の順に並べ替え", counts.add && `追加 ${counts.add}`, counts.rename && `名前の変更 ${counts.rename}`, counts.del && `削除 ${counts.del}`].filter(Boolean).join("・");
   toast(`工程表の作業項目をフローチャートに反映しました（${what}）。`, "元に戻す", undo);
 }
 
