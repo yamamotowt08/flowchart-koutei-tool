@@ -317,6 +317,7 @@ table.tasks { border-collapse: collapse; width: 100%; min-width: 1240px; font-si
         <h2 id="hTasks">作業と日程</h2>
         <div class="actions">
           <button id="btnImport" class="btn" type="button" title="フローチャートの手順・小項目・照査・打合せを作業項目にします（入れた日付は残ります）">フローチャートの手順を取り込む</button>
+          <button id="btnExport" class="btn" type="button" title="工程表の作業項目（1. は手順、1.1. は小項目）をフローチャートの手順に反映します">フローチャートに反映</button>
           <select id="planSample" aria-label="サンプルを入れる">
             <option value="">サンプルを入れる…</option>
             <option value="koutei">詳細検討業務（Excel の例）</option>
@@ -326,6 +327,7 @@ table.tasks { border-collapse: collapse; width: 100%; min-width: 1240px; font-si
       <div id="syncNote" class="sync" hidden>
         <span>フローチャートの手順と、工程表の作業項目がちがいます。</span>
         <button id="btnImport2" class="linkbtn" type="button">手順を取り込み直す</button>
+        <button id="btnExport2" class="linkbtn" type="button">工程表の作業をフローチャートに反映する</button>
         <button id="btnSyncIgnore" class="linkbtn" type="button">このままにする</button>
       </div>
       <p class="hint">開始日・終了日・日数のうち 2 つ、または日数だけを入れます（日数だけのときは上の作業の翌日から）。日付が変わったときは「変更後」に入れると、変更前のバーの下に変更後のバーが付きます。「＋期間」で同じ作業に別の期間（2 回目の照査など）を足せます。</p>
@@ -2988,30 +2990,140 @@ function computePlan() {
 // フローチャートの手順 → 作業項目（手順は 1. 2.、小項目は 1.1. 1.2.、照査・打合せは最後にまとめる）
 const ITEM_NUM_RE = /^[0-9０-９]+(?:[.．][0-9０-９]+)*[.．)）、:：]\s*/;
 const itemKey = name => clean(toHalf(clean(name)).replace(/^[0-9]+(?:\.[0-9]+)*[.)）、:：]?\s*/, ""));
-function flowTasks() {
+// フローチャートの作業（四角の箱）を、手順の欄のどこにあるかと一緒に並べる
+//   kind: step=本線の手順 / sub=小項目 / lane=同時進行の中 / side=並行（左）の中 / note=照査・打合せ
+function flowItems() {
   const { units, sides } = parse(ta.value, true, lineIds);
   const out = [], notes = [];
   const after = new Map();
   sides.forEach(sd => { const a = after.get(sd.after) || []; a.push(sd); after.set(sd.after, a); });
-  let n = 0;
   const strip = t => clean(clean(t).replace(ITEM_NUM_RE, ""));
-  const step = st => {
+  const step = (st, unit, kind) => {
     if (st.kind !== "proc" || !strip(st.text)) return;
-    n++;
-    out.push(`${n}.${strip(st.text)}`);
-    (st.subs || []).forEach((sb, k) => out.push(`${n}.${k + 1}.${strip(sb.text)}`));
+    const k = kind === "step" ? 0 : +String(st.uid).split(/\|<?/).pop();
+    out.push({ text: strip(st.text), depth: 1, kind, unit, line: st.line, k });
+    (st.subs || []).forEach(sb => { if (strip(sb.text)) out.push({ text: strip(sb.text), depth: 2, kind: "sub", unit, line: sb.line }); });
   };
-  units.forEach(u => {
-    if (u.kind === "block") u.lanes.forEach(l => l.forEach(step));
-    else step(u);
+  units.forEach((u, i) => {
+    if (u.kind === "block") u.lanes.forEach(l => l.forEach(st => step(st, i, "lane")));
+    else step(u, i, "step");
     (u.notes || []).forEach(nt => nt.items.forEach(t => { t = strip(t); if (t && !notes.includes(t)) notes.push(t); }));
-    (after.get(u) || []).forEach(sd => sd.items.forEach(step));
+    (after.get(u) || []).forEach(sd => sd.items.forEach(st => step(st, i, "side")));
   });
-  notes.forEach(t => { n++; out.push(`${n}.${t}`); });
+  notes.forEach(t => out.push({ text: t, depth: 1, kind: "note", unit: null }));
+  out.forEach(it => { it.key = itemKey(it.text); if (it.line !== undefined) it.id = lineIds[it.line]; });
   return out;
+}
+function flowTasks() {
+  let n = 0, m = 0;
+  return flowItems().map(it => (it.depth === 1 ? `${++n}.${(m = 0, it.text)}` : `${n}.${++m}.${it.text}`));
 }
 const flowSignature = () => flowTasks().map(itemKey).join("\n");
 const planSignature = () => sched.rows.filter(r => clean(r.name)).map(r => itemKey(r.name)).join("\n");
+
+// 工程表の作業項目 → フローチャートの手順（「1.」は手順、「1.1.」はすぐ上の手順の小項目）。
+// 同じ名前の箱はそのまま残し、名前を変えた行は同じ箱の名前を変え、増えた行は足し、消した行は消す。
+// 判断（？）・開始・終了・戻りの矢印など、工程表にないものはそのまま。
+const PLAN_NUM_RE = /^([0-9０-９]+)((?:[.．][0-9０-９]+)*)[.．)）、:：]?\s*/;
+function planItems() {
+  return sched.rows.filter(r => clean(r.name)).map(r => {
+    const name = clean(r.name), m = name.match(PLAN_NUM_RE);
+    const text = clean(m ? name.slice(m[0].length) : name) || name;
+    return { text, depth: m && m[2] ? 2 : 1, key: itemKey(text) };
+  });
+}
+function exportToFlow() {
+  const F = flowItems(), P = planItems();
+  if (!P.length) { toast("工程表に作業項目がありません。"); return; }
+  // 同じ名前どうしを順番どおりに対応させる（LCS）
+  const n = F.length, m = P.length, T = Array.from({ length: n + 1 }, () => new Array(m + 1).fill(0));
+  for (let i = n - 1; i >= 0; i--) for (let j = m - 1; j >= 0; j--) T[i][j] = F[i].key === P[j].key ? T[i + 1][j + 1] + 1 : Math.max(T[i + 1][j], T[i][j + 1]);
+  const raw = [];
+  let i = 0, j = 0;
+  while (i < n || j < m) {
+    if (i < n && j < m && F[i].key === P[j].key) raw.push({ f: F[i++], p: P[j++] });
+    else if (j < m && (i >= n || T[i][j + 1] >= T[i + 1][j])) raw.push({ p: P[j++], add: true });
+    else raw.push({ f: F[i++], del: true });
+  }
+  // 同じ場所で「消えた箱」と「増えた行」があれば、順番に組にして名前の変更にする
+  const ops = [];
+  for (let x = 0; x < raw.length;) {
+    if (!raw[x].add && !raw[x].del) { ops.push(raw[x++]); continue; }
+    const dels = [], ins = [];
+    while (x < raw.length && (raw[x].add || raw[x].del)) (raw[x].del ? dels : ins).push(raw[x++]);
+    const k = Math.min(dels.length, ins.length);
+    for (let y = 0; y < k; y++) ops.push({ f: dels[y].f, p: ins[y].p, rename: true });
+    dels.slice(k).forEach(o => ops.push(o));
+    ins.slice(k).forEach(o => ops.push(o));
+  }
+  if (!ops.some(o => o.rename || o.del || o.add)) { toast("フローチャートは、工程表の作業項目と同じです。"); return; }
+  commit();
+
+  const { g, lineInfo } = state, units = g.units;
+  const firstUnit = F.find(f => f.unit !== null);
+  const lastWork = [...units.keys()].reverse().find(u => !(units[u].kind !== "block" && units[u].isEnd));
+  const endUnit = units.findIndex(u => u.kind !== "block" && u.isEnd);
+  // 手順を足す場所：最初はいちばん上の作業の前（なければ「終了」の前、それもなければ最後）
+  let slot1 = firstUnit ? { before: lineIds[units[firstUnit.unit].line] }
+    : endUnit >= 0 ? { before: lineIds[units[endUnit].line] } : { after: lineIds[lineIds.length - 1] };
+  let slot2 = null;   // 小項目を足す場所（この行の後ろ）
+  const segs = new Map(), drop = new Set();
+  const seg = (rows, f) => {
+    if (!segs.has(f.id)) {
+      const t = rows[rowAt(rows, f.id)].t;
+      if (f.kind === "lane") segs.set(f.id, { kind: "lane", parts: laneParts(t) });
+      else {
+        const u = clean(t).replace(SIDE_RE, "").replace(/＞/g, ">"), q = u.indexOf(">");
+        segs.set(f.id, { kind: "side", parts: (q >= 0 ? u.slice(0, q) : u).split(/→|->|⇒/).map(clean).filter(Boolean), tail: q >= 0 ? u.slice(q) : "" });
+      }
+    }
+    return segs.get(f.id);
+  };
+  const noteEdit = (rows, from, to) => rows.forEach((r, x) => {
+    if (!lineInfo[lineIds.indexOf(r.id)] || lineInfo[lineIds.indexOf(r.id)].type !== "memo") return;
+    const items = clean(r.t).replace(NOTE_RE, "").split(/[、,，・\/／]/).map(clean).filter(Boolean);
+    if (!items.some(t => itemKey(t) === itemKey(from))) return;
+    const next = items.map(t => (itemKey(t) === itemKey(from) ? to : t)).filter(Boolean);
+    if (next.length) rows[x].t = `@${next.join("、")}`; else drop.add(r.id);
+  });
+  const counts = { add: 0, rename: 0, del: 0 };
+  editRows(rows => {
+    for (const o of ops) {
+      const f = o.f;
+      if (o.rename || o.del) {
+        counts[o.del ? "del" : "rename"]++;
+        const to = o.del ? null : o.p.text;
+        if (f.kind === "note") noteEdit(rows, f.text, to);
+        else if (f.kind === "lane" || f.kind === "side") seg(rows, f).parts[f.k] = to;
+        else if (o.del) drop.add(f.id);
+        else { const r = rows[rowAt(rows, f.id)]; r.t = r.t.includes(f.text) ? r.t.replace(f.text, to) : (f.kind === "sub" ? `・${to}` : to); }
+      }
+      if (o.add) {
+        counts.add++;
+        const id = newId();
+        if (o.p.depth === 2 && slot2) { insertAt(rows, { after: slot2 }, [{ t: `・${o.p.text}`, id }]); slot2 = id; if (slot1.newStep) slot1 = { after: id, newStep: true }; }
+        else { insertAt(rows, slot1, [{ t: o.p.text, id }]); slot1 = { after: id, newStep: true }; slot2 = id; }
+        continue;
+      }
+      if (o.del) continue;
+      // 残した（名前を変えた）箱：次に足す手順はこの手順のかたまりの後ろ、小項目はこの行の後ろ
+      if (f.unit !== null) slot1 = { after: lineIds[unitEnd(f.unit)] };
+      slot2 = f.kind === "step" || f.kind === "sub" ? f.id : null;
+    }
+    for (const [id, sg] of segs) {
+      const parts = sg.parts.filter(Boolean), x = rowAt(rows, id);
+      if (!parts.length) { drop.add(id); continue; }
+      rows[x].t = sg.kind === "lane" ? `| ${parts.join(" → ")}` : `< ${parts.join(" → ")}${sg.tail ? ` ${sg.tail}` : ""}`;
+    }
+    for (let x = rows.length - 1; x >= 0; x--) if (drop.has(rows[x].id)) rows.splice(x, 1);
+  });
+  update();
+  sched.ignoreSync = "";
+  planUpdate();
+  commit();
+  const what = [counts.add && `追加 ${counts.add}`, counts.rename && `名前の変更 ${counts.rename}`, counts.del && `削除 ${counts.del}`].filter(Boolean).join("・");
+  toast(`工程表の作業項目をフローチャートに反映しました（${what}）。`, "元に戻す", undo);
+}
 
 function importFlow(silent) {
   const names = flowTasks();
@@ -3208,6 +3320,8 @@ $("btnAddRow").addEventListener("click", () => {
 });
 $("btnImport").addEventListener("click", () => importFlow(false));
 $("btnImport2").addEventListener("click", () => importFlow(false));
+$("btnExport").addEventListener("click", exportToFlow);
+$("btnExport2").addEventListener("click", exportToFlow);
 $("btnSyncIgnore").addEventListener("click", () => { sched.ignoreSync = flowSignature(); planUpdate(); commit(); });
 $("planSample").addEventListener("change", e => {
   const k = e.target.value;
