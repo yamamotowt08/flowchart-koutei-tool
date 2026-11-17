@@ -1036,7 +1036,14 @@ function layout(g, o) {
   }
   // 黒い点は、必ず実線の矢印か箱のふちの上に置く（箱や点を動かしても線から離れない）
   for (const d of L.dots) {
-    const q = nearestOn([d.x, d.y], d.onEdge || !arrowSegs.length ? L.snap : arrowSegs);
+    // 同じ高さを通る矢印の上に置く。なければ、その点が付いている箱のふちの上（箱の中の矢印に吸い込まれない）
+    let q;
+    if (d.onEdge) q = nearestOn([d.x, d.y], L.snap);
+    else {
+      const cross = arrowSegs.filter(([a, b]) => Math.min(a[1], b[1]) - 0.5 <= d.y && d.y <= Math.max(a[1], b[1]) + 0.5);
+      const own = d.owner !== undefined && g.nodes[d.owner] && isShape(g.nodes[d.owner]) ? edges(g.nodes[d.owner]) : L.snap;
+      q = cross.length ? nearestOn([d.x, d.y], cross) : nearestOn([d.x, d.y], own);
+    }
     if (!q || Math.hypot(q[0] - d.x, q[1] - d.y) < 0.05) continue;
     d.x = q[0]; d.y = q[1];
     for (const ln of L.lines) {
@@ -3055,17 +3062,44 @@ function renumberRows(rows) {
 }
 const NOTE_NAME_RE = /照査|打合|打ち合|協議/;
 function planItems() {
-  let anchor = "";
-  return sched.rows.filter(r => clean(r.name)).map(r => {
+  // 行ごとの期間（その行と「＋期間」の行をまとめた、いちばん早い日〜いちばん遅い日。変更後があればそちら）
+  const res = computeSched(sched).rowRes, items = [];
+  const grow = (per, x) => {
+    if (!x) return per;
+    const s = x.hasChg ? x.cs : x.s, e = x.hasChg ? x.ce : x.e;
+    return per ? { s: Math.min(per.s, s), e: Math.max(per.e, e) } : { s, e };
+  };
+  sched.rows.forEach((r, i) => {
+    if (!clean(r.name)) { if (items.length) items[items.length - 1].per = grow(items[items.length - 1].per, res[i]); return; }
     const name = clean(r.name), m = name.match(PLAN_NUM_RE);
     const text = clean(m ? name.slice(m[0].length) : name) || name;
     const depth = m && m[2] ? 2 : 1, key = itemKey(text);
     // 形を覚えていない行（工程表で打った行）は、照査・打合せらしい名前なら直前の手順から横に分ける
     const fs = r.fs || (NOTE_NAME_RE.test(text) ? { kind: "note", at: [] } : null);
-    const it = { text, depth, key, fs, anchor };
-    if (depth === 1 && (!fs || fs.kind === "step")) anchor = key;
-    return it;
+    items.push({ text, depth, key, fs, typed: !r.fs, per: grow(null, res[i]) });
   });
+  // 日付のない見出しの行は、その下の小項目の期間をまとめて使う
+  items.forEach((it, i) => {
+    if (it.depth !== 1 || it.per) return;
+    for (let j = i + 1; j < items.length && items[j].depth === 2; j++) if (!isNoteItem(items[j])) it.per = it.per && items[j].per ? { s: Math.min(it.per.s, items[j].per.s), e: Math.max(it.per.e, items[j].per.e) } : it.per || items[j].per;
+  });
+  // 工程表で打った作業で、すぐ上の本線の作業と期間が重なるものは、並行（左）にする（小項目も一緒）
+  let main = null;
+  items.forEach((it, i) => {
+    if (it.depth !== 1 || isNoteItem(it)) return;
+    if (!it.typed) { if (it.fs.kind === "step") main = it; return; }
+    if (main && main.per && it.per && it.per.s <= main.per.e && it.per.e >= main.per.s) {
+      it.fs = { kind: "side", grp: `date|${main.key}` };
+      for (let j = i + 1; j < items.length && items[j].depth === 2; j++) if (!isNoteItem(items[j])) items[j].fs = { kind: "sub" };
+    } else main = it;
+  });
+  // 照査・打合せ（工程表で打ったもの）を付ける手順：直前の本線の手順
+  let anchor = "";
+  items.forEach(it => {
+    it.anchor = anchor;
+    if (it.depth === 1 && (!it.fs || it.fs.kind === "step")) anchor = it.key;
+  });
+  return items;
 }
 // 手順の行か（小項目・同時進行・並行・照査打合せ・メモの行ではない）と、その手順の名前
 const isStepRow = t => { t = clean(t); return !!t && !/^[・･\-*|｜<＜@＠※'\/]/.test(t); };
@@ -3222,7 +3256,7 @@ function exportToFlow() {
       if (o.del) continue;
       // 残した（名前を変えた）箱：次に足す手順はこの手順のかたまりの後ろ、小項目はこの行の後ろ
       if (f.unit !== null) slot1 = { after: lineIds[unitEnd(f.unit)] };
-      slot2 = f.kind === "step" || f.kind === "sub" ? f.id : null;
+      slot2 = f.kind === "step" || f.kind === "sub" || f.kind === "side" ? f.id : null;
     }
     placeNotes(rows, notesToAdd, PA, slot1);
     for (const [id, sg] of segs) {
