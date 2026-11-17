@@ -100,10 +100,14 @@ textarea#src { display: block; width: 100%; height: 360px; resize: vertical; bor
 
 .howto { border-top: 1px solid var(--rule); padding-top: 8px; }
 .howto summary { cursor: pointer; font-weight: 700; font-family: var(--f-display); letter-spacing: .04em; }
-.howto table { width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 13px; }
-.howto td { border-top: 1px solid var(--rule); padding: 5px 4px; vertical-align: top; }
-.howto td:first-child { font-family: var(--f-mono); white-space: nowrap; color: var(--accent); padding-right: 10px; }
-.howto .tbl { overflow-x: auto; }
+.howto h3 { margin: 12px 0 2px; font: 700 13px/1.4 var(--f-display); letter-spacing: .04em; color: var(--accent); }
+.howto .tip { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 3px 8px; padding: 7px 2px; border-top: 1px solid var(--rule); font-size: 13px; }
+.howto .tip .q { grid-column: 1 / -1; font-weight: 700; }
+.howto .tip code { justify-self: start; max-width: 100%; font: 13px/1.5 var(--f-mono); color: var(--accent); background: var(--accent-soft); border-radius: 4px; padding: 1px 7px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.howto .tip .how { grid-column: 1 / -1; color: var(--accent); font-weight: 700; }
+.howto .tip .note { grid-column: 1 / -1; color: var(--muted); font-size: 12px; }
+.howto .use { border: 1px solid var(--rule); background: var(--panel); border-radius: 4px; padding: 2px 9px; font-size: 12px; cursor: pointer; }
+.howto .use:hover { border-color: var(--accent); background: var(--accent-soft); }
 
 .stage { display: grid; gap: 10px; min-width: 0; }
 .opts { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; background: var(--panel); border: 1px solid var(--rule); border-radius: 8px; padding: 10px 14px; }
@@ -251,26 +255,37 @@ table.tasks { border-collapse: collapse; width: 100%; min-width: 1240px; font-si
       <div id="msgs" class="msgs" aria-live="polite"></div>
 
       <details class="howto" id="howto">
-        <summary>書き方</summary>
-        <div class="tbl">
-          <table>
-            <tr><td>開始 / 終了</td><td>角丸（開始・終了）。「完了」「スタート」なども可</td></tr>
-            <tr><td>在庫はある？</td><td>「？」で終わる行はひし形（判断）</td></tr>
-            <tr><td>書類を作る</td><td>それ以外は四角（処理）</td></tr>
-            <tr><td>判断？ &gt; 処理</td><td>「いいえ」のとき右に処理。そのあと元の流れ（次の手順）に戻る</td></tr>
-            <tr><td>判断？ &gt; 処理 &gt; 戻らない</td><td>処理のあと元の流れに戻らない（そこで終わる）。「×」でも可</td></tr>
-            <tr><td>判断？ &gt; 処理 &gt; 戻る</td><td>処理のあと次の手順に戻る（書かなくても同じ）</td></tr>
-            <tr><td>判断？ &gt; 処理 &gt; #2</td><td>処理のあと 2 番目の手順へ戻る（番号は左の青い数字）</td></tr>
-            <tr><td>判断？ &gt; #5</td><td>「いいえ」のとき 5 番目の手順へ</td></tr>
-            <tr><td>判断？ &gt; 終了</td><td>「いいえ」のとき右に終了</td></tr>
-            <tr><td>| 作業A → 作業B<br>| 作業C</td><td>「|」で始まる行が続くと同時進行（1 行が 1 列）。→ で同じ列の次の作業。前後は二重線で分かれて合流します</td></tr>
-            <tr><td>・小項目</td><td>すぐ上の手順の中に小さな箱で入る（例：・基礎工の検討）</td></tr>
-            <tr><td>@照査、打合せ</td><td>右に照査・打合せの箱を付ける。手順の見出しのすぐ下なら見出しの横、小項目の間ならその間、最後なら次の手順との間に付きます</td></tr>
-            <tr><td>&lt; 作業 &gt; 図面作成</td><td>すぐ上の手順と並行して左で進み、「図面作成」の前で本線に合流（破線）。「&gt; #9」のように番号でも可。下に「・」で小項目も書けます</td></tr>
-            <tr><td>※ メモ</td><td>図には出ません</td></tr>
-            <tr><td>○ / ◇ / □</td><td>行の先頭に付けて空白を入れると形を指定（例：○ 受付完了）</td></tr>
-          </table>
-        </div>
+        <summary>書き方（こうしたいときは、こう書く）</summary>
+        <h3>基本</h3>
+        <div class="tip"><span class="q">手順（四角の箱）を足したい</span><code>書類を作る</code><button type="button" class="use" data-snip="書類を作る" title="この例を手順の欄に入れます">入れる</button><span class="note">1 行に 1 つ書きます。上から順に矢印でつながります</span></div>
+        <div class="tip"><span class="q">始まり・終わりを丸い箱にしたい</span><code>開始</code><button type="button" class="use" data-snip="開始" title="この例を手順の欄に入れます">入れる</button><span class="note">「終了」「完了」「納品」なども丸くなります</span></div>
+        <div class="tip"><span class="q">判断（ひし形）にしたい</span><code>内容は正しい？</code><button type="button" class="use" data-snip="内容は正しい？" title="この例を手順の欄に入れます">入れる</button><span class="note">最後を「？」にします</span></div>
+        <div class="tip"><span class="q">形を自分で決めたい</span><code>○ 受付完了</code><button type="button" class="use" data-snip="○ 受付完了" title="この例を手順の欄に入れます">入れる</button><span class="note">先頭に ○（丸）・◇（ひし形）・□（四角）と空白を付けます</span></div>
+        <div class="tip"><span class="q">図に出さないメモを残したい</span><code>※ メモ</code><button type="button" class="use" data-snip="※ メモ" title="この例を手順の欄に入れます">入れる</button><span class="note">「※」で始まる行は図に出ません</span></div>
+        <h3>「いいえ」のとき（判断のあと）</h3>
+        <div class="tip"><span class="q">別の処理をして、次の手順に進みたい</span><code>内容は正しい？ &gt; 書き直す</code><button type="button" class="use" data-snip="内容は正しい？ &gt; 書き直す" title="この例を手順の欄に入れます">入れる</button><span class="note">右に処理の箱ができ、そのあと次の手順に合流します</span></div>
+        <div class="tip"><span class="q">別の処理をして、前の手順に戻したい</span><code>内容は正しい？ &gt; 書き直す &gt; #2</code><button type="button" class="use" data-snip="内容は正しい？ &gt; 書き直す &gt; #2" title="この例を手順の欄に入れます">入れる</button><span class="note">#番号は左の青い数字です。箱を足したり並べ替えたりしても、番号は自動で付け直されます</span></div>
+        <div class="tip"><span class="q">処理をせずに、別の手順へ飛ばしたい</span><code>予算内？ &gt; #5</code><button type="button" class="use" data-snip="予算内？ &gt; #5" title="この例を手順の欄に入れます">入れる</button></div>
+        <div class="tip"><span class="q">そこで終わりにしたい</span><code>予算内？ &gt; 終了</code><button type="button" class="use" data-snip="予算内？ &gt; 終了" title="この例を手順の欄に入れます">入れる</button></div>
+        <div class="tip"><span class="q">処理のあと、元の流れに戻さない</span><code>内容は正しい？ &gt; 差し戻し &gt; 戻らない</code><button type="button" class="use" data-snip="内容は正しい？ &gt; 差し戻し &gt; 戻らない" title="この例を手順の欄に入れます">入れる</button><span class="note">「×」でも同じです</span></div>
+        <h3>いっしょに進める</h3>
+        <div class="tip"><span class="q">いくつかの作業を同時に進めたい</span><code>| 現地踏査 → 写真整理
+| 資料収集</code><button type="button" class="use" data-snip="| 現地踏査 → 写真整理
+| 資料収集" title="この例を手順の欄に入れます">入れる</button><span class="note">「|」の 1 行が 1 列です。→ で同じ列の次の作業。前後は二重線で分かれて合流します</span></div>
+        <div class="tip"><span class="q">本線と並行して、左で進めたい</span><code>&lt; 対策設計 &gt; 図面作成</code><button type="button" class="use" data-snip="&lt; 対策設計 &gt; 図面作成" title="この例を手順の欄に入れます">入れる</button><span class="note">すぐ上の手順と並行して進み、「&gt;」のあとの手順の前で合流します（#番号でも可）。下に「・」で小項目も書けます</span></div>
+        <h3>中身を付け足す</h3>
+        <div class="tip"><span class="q">手順の中に細かい作業を入れたい</span><code>・基礎工の検討</code><button type="button" class="use" data-snip="・基礎工の検討" title="この例を手順の欄に入れます">入れる</button><span class="note">すぐ上の手順の箱の中に、小さな箱で入ります</span></div>
+        <div class="tip"><span class="q">照査・打合せを横に付けたい</span><code>@照査、打合せ</code><button type="button" class="use" data-snip="@照査、打合せ" title="この例を手順の欄に入れます">入れる</button><span class="note">手順のすぐ下なら見出しの横、小項目の間ならその間、最後なら次の手順との間に付きます</span></div>
+        <h3>図で直す（ドラッグ）</h3>
+        <div class="tip"><span class="q">手順の順番を変えたい</span><span class="how">箱を上下にドラッグ</span><span class="note">手順の欄の行も同じ順番に並び替わります</span></div>
+        <div class="tip"><span class="q">小項目を別の手順へ移したい</span><span class="how">小項目を別の箱の上へドラッグ</span><span class="note">何もない所で離すと、普通の手順になります</span></div>
+        <div class="tip"><span class="q">同時進行・並行（左）・「いいえ」の箱を本線に出したい</span><span class="how">その箱を本線の列へドラッグ</span><span class="note">同時進行の箱は、ほかの列や外側（新しい列）にも動かせます</span></div>
+        <div class="tip"><span class="q">照査・打合せの場所を変えたい</span><span class="how">箱か、つながっている黒い点をドラッグ</span></div>
+        <div class="tip"><span class="q">並行（左）の分かれる所・合流先を変えたい</span><span class="how">上か下の黒い点をドラッグ</span><span class="note">点を置いた所のすぐ下の手順が、分かれる所・合流先になります</span></div>
+        <div class="tip"><span class="q">矢印のつなぎ先を変えたい</span><span class="how">矢印のはしをつかんで、別の箱で離す</span><span class="note">何もない所で離すと、そこまで伸びます</span></div>
+        <div class="tip"><span class="q">線を点線にしたい・消したい</span><span class="how">線をクリック</span><span class="note">まっすぐな矢印は、ドラッグで横にずらせます</span></div>
+        <div class="tip"><span class="q">箱を消したい</span><span class="how">箱をクリックして Delete キー</span><span class="note">小項目をクリックすると、その小項目だけ消せます</span></div>
+        <div class="tip"><span class="q">位置だけ少し直したい</span><span class="how">少しだけずらす</span><span class="note">並びが変わらない程度なら、手順の欄はそのままです</span></div>
       </details>
     </section>
 
@@ -325,7 +340,7 @@ table.tasks { border-collapse: collapse; width: 100%; min-width: 1240px; font-si
       </div>
       <div class="stats">
         <span id="stats"></span>
-        <span>図形・黒い点・折れ曲がった線はドラッグで動かせます。矢印のはしをつかんで別の箱で離すとつなぎ先が変わり、何もない所で離すとそこまで伸びます。箱を動かすと上下の箱や縦の線にそろって補助線が出ます。箱をクリックして Delete キーで、その手順を消せます。線をクリックすると実線・点線を選んだり消したりでき、まっすぐな矢印はドラッグで横にずらせます　<button id="btnReset" class="linkbtn" type="button" hidden>配置を元に戻す</button> <button id="btnShowLines" class="linkbtn" type="button" hidden>消した線を戻す</button></span>
+        <span>箱・黒い点・線はドラッグで動かせます（手順の欄も一緒に変わります）。やり方は左の<button id="btnHowto" class="linkbtn" type="button">書き方の「図で直す」</button>にあります　<button id="btnReset" class="linkbtn" type="button" hidden>配置を元に戻す</button> <button id="btnShowLines" class="linkbtn" type="button" hidden>消した線を戻す</button></span>
       </div>
     </section>
   </main>
@@ -1579,6 +1594,20 @@ const INSERTS = {
   end: () => insertLine("終了", 0, 2),
 };
 document.querySelectorAll("[data-ins]").forEach(b => b.addEventListener("click", () => INSERTS[b.dataset.ins]()));
+// 書き方の「入れる」：例をカーソルの行（空いていなければその下）に入れて、1 行目を選んでおく
+$("howto").addEventListener("click", e => {
+  const b = e.target.closest("[data-snip]");
+  if (!b) return;
+  const t = b.dataset.snip;
+  insertLine(t, 0, t.split("\n")[0].length);
+  toast("例を入れました。選ばれている所を書き換えてください。", "元に戻す", undo);
+});
+$("btnHowto").addEventListener("click", () => {
+  const d = $("howto");
+  d.open = true;
+  const h = [...d.querySelectorAll("h3")].find(x => x.textContent.startsWith("図で直す"));
+  (h || d).scrollIntoView({ behavior: "smooth", block: "start" });
+});
 
 $("sample").addEventListener("change", e => {
   const k = e.target.value;
