@@ -320,6 +320,7 @@ table.tasks { border-collapse: collapse; width: 100%; min-width: 1240px; font-si
           <button id="btnExport" class="btn" type="button" title="工程表の作業項目（1. は手順、1.1. は小項目）をフローチャートの手順に反映します">フローチャートに反映</button>
           <select id="planSample" aria-label="サンプルを入れる">
             <option value="">サンプルを入れる…</option>
+            <option value="blank">白紙にする</option>
             <option value="koutei">詳細検討業務（Excel の例）</option>
           </select>
         </div>
@@ -2570,6 +2571,7 @@ function normalizeSched(o) {
     return x;
   });
   if (typeof o.ignoreSync === "string") sc.ignoreSync = o.ignoreSync;
+  if (o.noAuto === true) sc.noAuto = true;
   return sc;
 }
 
@@ -3583,6 +3585,18 @@ $("btnSyncIgnore").addEventListener("click", () => { sched.ignoreSync = flowSign
 $("planSample").addEventListener("change", e => {
   const k = e.target.value;
   e.target.value = "";
+  if (k === "blank") {
+    // 作業項目と見出しを空にする（設定はそのまま）。白紙にしたあとは、フローチャートの手順を自動では取り込まない
+    commit();
+    sched = Object.assign(defaultSched(), { cfg: sched.cfg, noAuto: true });
+    fillFields();
+    renderTasks();
+    planUpdate();
+    showHolidays();
+    commit();
+    toast("工程表を白紙にしました。", "元に戻す", undo);
+    return;
+  }
   if (k !== "koutei") return;
   commit();
   const sc = defaultSched();
@@ -3631,7 +3645,7 @@ function setView(v) {
     : "手順を書くと、その場で図ができます。PowerPoint の図形のまま保存できます。";
   try { localStorage.setItem("fc-koutei-view", view); } catch (e) { /* なくても動く */ }
   if (plan) {
-    if (!sched.rows.length && flowTasks().length) importFlow(true);
+    if (!sched.rows.length && !sched.noAuto && flowTasks().length) importFlow(true);
     planUpdate();
     showHolidays();
   } else update();
