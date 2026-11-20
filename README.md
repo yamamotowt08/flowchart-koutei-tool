@@ -15,8 +15,8 @@
 | ファイル | 中身 |
 |---|---|
 | **FlowKouteiTool.zip** | アプリ（`フローチャート・工程表作成ツール.exe`）と、つかいかたブック（Word・PDF）。ZIP を展開して EXE をダブルクリック |
-| **フローチャート・工程表作成ツール.html** | HTML 版。ダブルクリックして Edge か Chrome で開く。EXE のダウンロードが止められるパソコンでも使えます（できることは同じ） |
-| **つかいかたブック（.docx / .pdf）** | 小学生でもわかる言葉で書いた、できることリストと手順書 |
+| **FlowKouteiTool.html** | HTML 版。ダブルクリックして Edge か Chrome で開く。EXE のダウンロードが止められるパソコンでも使えます（できることは同じ） |
+| **FlowKouteiTool_manual.docx / .pdf** | つかいかたブック。小学生でもわかる言葉で書いた、できることリストと手順書 |
 
 EXE は Windows 10・11 に入っている .NET Framework 4.8 と「Microsoft Edge WebView2 ランタイム」で動きます。
 
