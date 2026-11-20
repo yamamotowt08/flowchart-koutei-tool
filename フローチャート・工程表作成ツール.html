@@ -171,7 +171,12 @@ table.tasks { border-collapse: collapse; width: 100%; min-width: 1240px; font-si
 .tasks thead tr:last-child th { border-bottom: 1px solid var(--rule); }
 .tasks th.chg, .tasks td.chg { background: var(--chg-soft); }
 .tasks td { padding: 3px 4px; border-top: 1px solid var(--rule); vertical-align: middle; }
-.tasks td.no { color: var(--muted); font: 12px var(--f-mono); text-align: right; padding-right: 6px; width: 2.4em; }
+.tasks td.no { color: var(--muted); font: 12px var(--f-mono); text-align: right; padding-right: 6px; width: 3.4em; white-space: nowrap; cursor: grab; user-select: none; touch-action: none; }
+.tasks td.no::before { content: "⠿"; margin-right: 4px; opacity: .6; }
+.tasks td.no:hover { color: var(--accent); }
+.tasks tr.drag-src td { opacity: .45; }
+.tasks tr.drop-before td { box-shadow: inset 0 3px 0 var(--accent); }
+.tasks tr.drop-after td { box-shadow: inset 0 -3px 0 var(--accent); }
 .tasks input, .tasks select { width: 100%; padding: 4px 6px; }
 .tasks input[type="date"] { min-width: 9em; }
 .tasks input[type="number"] { min-width: 4.4em; }
@@ -3505,7 +3510,7 @@ function rowHtml(r, i) {
   const inp = (k, type, extra = "") => `<input type="${type}" data-k="${k}" value="${esc(r[k])}"${extra}>`;
   const pick = cont ? "" : `<select data-k="lv" class="lv lv${lv}" aria-label="作業か小項目か" title="作業＝黄色の箱、小項目＝黄色の箱の中の作業"><option value="1"${lv === 1 ? " selected" : ""}>作業</option><option value="2"${lv === 2 ? " selected" : ""}>小項目</option></select>`;
   return `<tr data-id="${r.id}" class="${cont ? "cont" : lv === 2 ? "sub" : ""}">`
-    + `<td class="no">${i + 1}</td>`
+    + `<td class="no" title="つかんで上下にドラッグすると、行を動かせます">${i + 1}</td>`
     + `<td class="name"><div class="nm">${pick}${inp("name", "text", ` placeholder="${cont ? "（上の作業の別の期間）" : lv === 2 ? "小項目" : "作業項目"}" aria-label="作業項目"`)}</div></td>`
     + `<td>${inp("s", "date", ' aria-label="開始日"')}</td><td>${inp("e", "date", ' aria-label="終了日"')}</td><td>${inp("d", "number", ' min="1" step="1" aria-label="日数"')}</td>`
     + `<td class="chg">${inp("cs", "date", ' aria-label="変更後の開始日"')}</td><td class="chg">${inp("ce", "date", ' aria-label="変更後の終了日"')}</td><td class="chg">${inp("cd", "number", ' min="1" step="1" aria-label="変更後の日数"')}</td>`
@@ -3685,8 +3690,18 @@ taskRows.addEventListener("click", e => {
     const nr = newRow({ color: "" });
     rows.splice(j, 0, nr);
     focus = [nr.id, "s"];
-  } else if (act === "up" && i > 0) { [rows[i - 1], rows[i]] = [rows[i], rows[i - 1]]; focus = [rows[i - 1].id, null]; }
-  else if (act === "down" && i < rows.length - 1) { [rows[i + 1], rows[i]] = [rows[i], rows[i + 1]]; focus = [rows[i + 1].id, null]; }
+  } else if (act === "up" || act === "down") {
+    // ドラッグと同じく、作業は小項目・＋期間の行ごと、1 つ前（後ろ）のかたまりを飛びこえて動く
+    const id = rows[i].id, lv = rowLevel(rows[i]), [a, b] = rowBlock(i);
+    let t = null;
+    if (act === "up") {
+      let p = a - 1;
+      while (p >= 0 && (isContRow(rows[p], p) || (lv === 1 && rowLevel(rows[p]) === 2))) p--;
+      if (p >= 0) t = p;
+    } else if (b < rows.length) t = rowBlock(b)[1];
+    if (t === null || !moveRows(i, t)) return;
+    focus = [id, null];
+  }
   else if (act === "del") { rows.splice(i, 1); renumbered = renumberRows(rows); }
   else return;
   renderTasks();
@@ -3698,6 +3713,53 @@ taskRows.addEventListener("click", e => {
     if (el) el.focus();
   }
   if (act === "del") toast(renumbered ? "行を消して、番号を詰めました。" : "行を消しました。", "元に戻す", undo);
+});
+// 行をつかんで上下に動かす。作業（黄色の箱）は、その下の小項目と「＋期間」の行も一緒に動く
+function rowBlock(i) {
+  const rows = sched.rows, top = rowLevel(rows[i]) === 1;
+  let j = i + 1;
+  while (j < rows.length && (isContRow(rows[j], j) || (top && rowLevel(rows[j]) === 2 && (clean(rows[j].name) || rows[j].lv)))) j++;
+  return [i, j];
+}
+function moveRows(i, t) {
+  const rows = sched.rows, [a, b] = rowBlock(i);
+  if (t >= a && t <= b) return null;
+  const block = rows.splice(a, b - a);
+  rows.splice(t > a ? t - (b - a) : t, 0, ...block);
+  return { n: b - a, renumbered: renumberRows(rows) };
+}
+let rowDrag = null;
+taskRows.addEventListener("pointerdown", e => {
+  const td = e.target.closest("td.no");
+  if (!td || e.button !== 0) return;
+  const i = rowIndexOf(td);
+  if (i < 0) return;
+  e.preventDefault();
+  const [a, b] = rowBlock(i);
+  rowDrag = { i, t: null };
+  [...taskRows.querySelectorAll("tr[data-id]")].slice(a, b).forEach(tr => tr.classList.add("drag-src"));
+});
+window.addEventListener("pointermove", e => {
+  if (!rowDrag) return;
+  const trs = [...taskRows.querySelectorAll("tr[data-id]")];
+  let t = trs.length;
+  for (let k = 0; k < trs.length; k++) { const r = trs[k].getBoundingClientRect(); if (e.clientY < r.top + r.height / 2) { t = k; break; } }
+  rowDrag.t = t;
+  trs.forEach((tr, k) => { tr.classList.toggle("drop-before", k === t); tr.classList.toggle("drop-after", t === trs.length && k === trs.length - 1); });
+});
+window.addEventListener("pointerup", () => {
+  if (!rowDrag) return;
+  const d = rowDrag;
+  rowDrag = null;
+  taskRows.querySelectorAll(".drag-src, .drop-before, .drop-after").forEach(tr => tr.classList.remove("drag-src", "drop-before", "drop-after"));
+  if (d.t === null) return;
+  commit();
+  const moved = moveRows(d.i, d.t);
+  if (!moved) return;
+  renderTasks();
+  planUpdate();
+  commit();
+  toast(`${moved.n > 1 ? `${moved.n} 行（小項目・＋期間の行も一緒）` : "行"}を動かしました${moved.renumbered ? "（番号も付け直しました）" : ""}。`, "元に戻す", undo);
 });
 const addTaskRow = lv => {
   commit();
