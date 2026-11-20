@@ -20,7 +20,7 @@ EXE = ROOT / 'app' / 'bin' / 'Release' / 'net48' / 'FlowKouteiTool.exe'
 APP_NAME = 'フローチャート・工程表作成ツール.exe'
 DIST = ROOT / 'dist'
 ZIP_NAME = 'FlowKouteiTool.zip'
-MANUALS = ['フローチャート・工程表作成ツール_つかいかた.docx', 'フローチャート・工程表作成ツール_つかいかた.pdf']
+MANUALS = ['フローチャート・工程表作成ツール_操作説明書.docx']
 
 
 class ShiftJisName(zipfile.ZipInfo):

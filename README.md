@@ -14,9 +14,9 @@
 
 | ファイル | 中身 |
 |---|---|
-| **FlowKouteiTool.zip** | アプリ（`フローチャート・工程表作成ツール.exe`）と、つかいかたブック（Word・PDF）。ZIP を展開して EXE をダブルクリック |
+| **FlowKouteiTool.zip** | アプリ（`フローチャート・工程表作成ツール.exe`）と操作説明書（Word）。ZIP を展開して EXE をダブルクリック |
 | **FlowKouteiTool.html** | HTML 版。ダブルクリックして Edge か Chrome で開く。EXE のダウンロードが止められるパソコンでも使えます（できることは同じ） |
-| **FlowKouteiTool_manual.docx / .pdf** | つかいかたブック。小学生でもわかる言葉で書いた、できることリストと手順書 |
+| **FlowKouteiTool_manual.docx** | 操作説明書（Word）。動作環境、画面構成、入力の書き方、各機能の操作、よくある質問 |
 
 EXE は Windows 10・11 に入っている .NET Framework 4.8 と「Microsoft Edge WebView2 ランタイム」で動きます。
 
@@ -57,6 +57,6 @@ EXE は Windows 10・11 に入っている .NET Framework 4.8 と「Microsoft Ed
 ```
 python3 tools/build_web.py      # HTML 版（と EXE に入れる app/tool.html）を作り直す（python-pptx が必要）
 python3 tools/build_app.py      # EXE と dist/FlowKouteiTool.zip を作る（dotnet が必要）
-python3 tools/make_shots.py     # 手順書の絵を docs/img/ に作る（Google Chrome が必要）
-python3 tools/build_manual.py   # 手順書 docs/…_つかいかた.docx と PDF を作る（python-docx・LibreOffice が必要）
+python3 tools/make_shots.py     # 操作説明書の絵を docs/img/ に作る（Google Chrome が必要）
+python3 tools/build_manual.py   # 操作説明書 docs/…_操作説明書.docx を作る（python-docx が必要）
 ```
