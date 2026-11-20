@@ -26,6 +26,7 @@
   --shadow: rgba(20, 40, 45, .14);
   --chg: #B3261E;
   --chg-soft: #FCEBDC;
+  --box-soft: #FFF8B8;
   --warn-soft: #FBE7DC;
   --f-display: "Zen Kaku Gothic New", "Yu Gothic UI", "Meiryo UI", sans-serif;
   --f-body: "BIZ UDPGothic", "Meiryo UI", "Yu Gothic UI", "Hiragino Sans", sans-serif;
@@ -37,14 +38,14 @@
     --desk: #111718; --panel: #192124; --ink: #E2E9E7; --muted: #93A2A5; --rule: #2B373A;
     --accent: #66B6D1; --accent-ink: #0C181C; --accent-soft: #1C3440; --grid: rgba(102, 182, 209, .07);
     --warn: #E79B66; --paper: #FFFFFF; --shadow: rgba(0, 0, 0, .45); color-scheme: dark;
-    --chg: #F08A7E; --chg-soft: #33261C; --warn-soft: #3A2419;
+    --chg: #F08A7E; --chg-soft: #33261C; --warn-soft: #3A2419; --box-soft: #4A4422;
   }
 }
 :root[data-theme="dark"] {
   --desk: #111718; --panel: #192124; --ink: #E2E9E7; --muted: #93A2A5; --rule: #2B373A;
   --accent: #66B6D1; --accent-ink: #0C181C; --accent-soft: #1C3440; --grid: rgba(102, 182, 209, .07);
   --warn: #E79B66; --paper: #FFFFFF; --shadow: rgba(0, 0, 0, .45); color-scheme: dark;
-  --chg: #F08A7E; --chg-soft: #33261C; --warn-soft: #3A2419;
+  --chg: #F08A7E; --chg-soft: #33261C; --warn-soft: #3A2419; --box-soft: #4A4422;
 }
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
@@ -176,6 +177,11 @@ table.tasks { border-collapse: collapse; width: 100%; min-width: 1240px; font-si
 .tasks input[type="number"] { min-width: 4.4em; }
 .tasks td.name { min-width: 15em; }
 .tasks tr.cont td.name input { margin-left: 1.4em; width: calc(100% - 1.4em); }
+.tasks .nm { display: flex; gap: 4px; align-items: center; }
+.tasks .nm input { flex: 1; min-width: 0; }
+.tasks select.lv { width: auto; flex: none; padding: 4px 4px; font-size: 12px; }
+.tasks select.lv1 { background: var(--box-soft); }
+.tasks tr.sub .nm { padding-left: 1.4em; }
 .tasks tr.cont td.name input::placeholder { color: var(--muted); }
 .tasks tr.bad td { background: var(--warn-soft); }
 .tasks td.res { font-size: 12px; color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; line-height: 1.35; }
@@ -343,6 +349,7 @@ table.tasks { border-collapse: collapse; width: 100%; min-width: 1240px; font-si
       </div>
       <div class="inserts">
         <button id="btnAddRow" class="chip" type="button">＋ 作業を追加</button>
+        <button id="btnAddSub" class="chip" type="button">＋ 小項目を追加</button>
       </div>
       <div id="planMsgs" class="msgs" aria-live="polite"></div>
     </section>
@@ -2562,9 +2569,9 @@ const HEAD_FIELDS = [
 const BAR_COLORS = [["000000", "黒"], ["1F3864", "紺"], ["2E75B6", "青"], ["00B0F0", "水色"], ["548235", "緑"],
   ["BF9000", "黄土"], ["ED7D31", "橙"], ["C00000", "赤"], ["7030A0", "紫"], ["808080", "灰"]];
 const CFG_DEFAULT = { dayMode: "cal", barColor: "000000", barHeight: "35", chgColor: "C00000", oldStyle: "fill", extraOff: "" };
-const ROW_FIELDS = ["name", "s", "e", "d", "cs", "ce", "cd", "color", "note"];
+const ROW_FIELDS = ["name", "s", "e", "d", "cs", "ce", "cd", "color", "note", "lv"];
 
-const newRow = (o = {}) => Object.assign({ id: newId(), name: "", s: "", e: "", d: "", cs: "", ce: "", cd: "", color: "", note: "" }, o);
+const newRow = (o = {}) => Object.assign({ id: newId(), name: "", s: "", e: "", d: "", cs: "", ce: "", cd: "", color: "", note: "", lv: "" }, o);
 function defaultSched() {
   const head = {};
   HEAD_FIELDS.forEach(([k, , v]) => { head[k] = v; });
@@ -3080,7 +3087,7 @@ function flowItems() {
     out.push({ text: strip(st.text), depth: 1, kind, unit, line: st.line, k, shape: Object.assign({ kind }, shape) });
     if (u) out.push(...notesOf(u, p => p === "head"));
     (st.subs || []).forEach((sb, j) => {
-      if (strip(sb.text)) out.push({ text: strip(sb.text), depth: 2, kind: "sub", unit, line: sb.line, shape: { kind: "sub" } });
+      if (strip(sb.text)) out.push({ text: strip(sb.text), depth: 2, kind: "sub", unit, line: sb.line, parent: (kind === "side" ? "<" : "") + itemKey(strip(st.text)), shape: { kind: "sub" } });
       if (u) out.push(...notesOf(u, p => p === `between${j + 1}`));
     });
   };
@@ -3099,7 +3106,8 @@ function flowTasks() {
   return flowItems().map(it => (it.depth === 1 ? `${++n}.${(m = 0, it.text)}` : `${n}.${++m}.${it.text}`));
 }
 const noteSig = it => `${it.key}|${it.anchor}|${it.place}`;
-const signature = items => items.filter(it => !isNoteItem(it)).map(it => it.key).join("\n") + "\n@" + items.filter(isNoteItem).map(noteSig).sort().join("\n");
+const kindTag = it => { const k = it.fs ? it.fs.kind : it.kind; return k === "side" ? "<" : k === "lane" ? "|" : ""; };
+const signature = items => items.filter(it => !isNoteItem(it)).map(it => (it.depth === 2 ? `  ${it.parent || ""}/${it.key}` : kindTag(it) + it.key)).join("\n") + "\n@" + items.filter(isNoteItem).map(noteSig).sort().join("\n");
 const isNoteItem = it => (it.fs ? it.fs.kind : it.kind) === "note";
 const flowSignature = () => signature(flowItems());
 const planSignature = () => signature(planItems());
@@ -3137,7 +3145,7 @@ function planItems() {
     if (!clean(r.name)) { if (items.length) items[items.length - 1].per = grow(items[items.length - 1].per, res[i]); return; }
     const name = clean(r.name), m = name.match(PLAN_NUM_RE);
     const text = clean(m ? name.slice(m[0].length) : name) || name;
-    const depth = m && m[2] ? 2 : 1, key = itemKey(text);
+    const depth = m ? (m[2] ? 2 : 1) : r.lv === "2" ? 2 : 1, key = itemKey(text);
     // 形を覚えていない行（工程表で打った行）は、照査・打合せらしい名前なら直前の手順から横に分ける
     const fs = NOTE_NAME_RE.test(text) && !(r.fs && ["note", "lane", "side"].includes(r.fs.kind)) ? { kind: "note" } : r.fs || null;
     items.push({ text, depth, key, fs, typed: !r.fs, per: grow(null, res[i]) });
@@ -3187,6 +3195,9 @@ function planItems() {
       for (let j = i + 1; j < items.length && items[j].depth === 2; j++) if (!isNoteItem(items[j])) items[j].fs = { kind: "sub" };
     } else main = it;
   });
+  // 小項目の親：すぐ上の作業（並行（左）の作業も含む）
+  let par = "";
+  items.forEach(it => { if (isNoteItem(it)) return; if (it.depth === 1) par = ((it.fs || {}).kind === "side" ? "<" : "") + it.key; else it.parent = par; });
   // 照査・打合せの付け先：工程表で置いた場所。直前の本線の手順（同時進行なら、そのかたまり）と、
   // その小項目の何番目のあとか（見出しの横 / 小項目の間 / 手順のあと）
   let anc = null, lane = null, laneBlk = null, cnt = 0, nSubs = 0, pastSide = false;
@@ -3300,11 +3311,14 @@ function exportToFlow() {
   const F = FA.filter(f => !isNoteItem(f)), P = PA.filter(p => !isNoteItem(p));
   // 同じ名前どうしを順番どおりに対応させる（LCS）
   const n = F.length, m = P.length, T = Array.from({ length: n + 1 }, () => new Array(m + 1).fill(0));
-  for (let i = n - 1; i >= 0; i--) for (let j = m - 1; j >= 0; j--) T[i][j] = F[i].key === P[j].key ? T[i + 1][j + 1] + 1 : Math.max(T[i + 1][j], T[i][j + 1]);
+  // 作業と小項目、本線・同時進行・並行（左）は別のもの。小項目は親の作業も同じとき
+  const kindOf = it => (it.depth === 2 ? "sub" : it.fs ? (["lane", "side"].includes(it.fs.kind) ? it.fs.kind : "step") : it.kind === "lane" || it.kind === "side" ? it.kind : "step");
+  const same = (f, p) => f.key === p.key && f.depth === p.depth && kindOf(f) === kindOf(p) && (f.depth === 1 || f.parent === p.parent);
+  for (let i = n - 1; i >= 0; i--) for (let j = m - 1; j >= 0; j--) T[i][j] = same(F[i], P[j]) ? T[i + 1][j + 1] + 1 : Math.max(T[i + 1][j], T[i][j + 1]);
   const raw = [];
   let i = 0, j = 0;
   while (i < n || j < m) {
-    if (i < n && j < m && F[i].key === P[j].key) raw.push({ f: F[i++], p: P[j++] });
+    if (i < n && j < m && same(F[i], P[j])) raw.push({ f: F[i++], p: P[j++] });
     else if (j < m && (i >= n || T[i][j + 1] >= T[i + 1][j])) raw.push({ p: P[j++], add: true });
     else raw.push({ f: F[i++], del: true });
   }
@@ -3314,10 +3328,14 @@ function exportToFlow() {
     if (!raw[x].add && !raw[x].del) { ops.push(raw[x++]); continue; }
     const dels = [], ins = [];
     while (x < raw.length && (raw[x].add || raw[x].del)) (raw[x].del ? dels : ins).push(raw[x++]);
-    const k = Math.min(dels.length, ins.length);
-    for (let y = 0; y < k; y++) ops.push({ f: dels[y].f, p: ins[y].p, rename: true });
-    dels.slice(k).forEach(o => ops.push(o));
-    ins.slice(k).forEach(o => ops.push(o));
+    // 名前の変更にするのは、同じ段（作業どうし・小項目どうし）で、同じ名前ではないものだけ
+    // （どちらかの名前がもう片方にもあるなら、名前の変更ではなく「動いた」もの）
+    const used = new Set(), dKeys = new Set(dels.map(d => d.f.key)), iKeys = new Set(ins.map(o => o.p.key));
+    for (const d of dels) {
+      const q = !iKeys.has(d.f.key) && ins.find(o => !used.has(o) && o.p.depth === d.f.depth && kindOf(o.p) === kindOf(d.f) && !dKeys.has(o.p.key));
+      if (q) { used.add(q); ops.push({ f: d.f, p: q.p, rename: true }); } else ops.push(d);
+    }
+    ins.filter(o => !used.has(o)).forEach(o => ops.push(o));
   }
   {
     // 照査・打合せは 1 つずつ、名前・付け先・場所が同じものどうしを合わせる。
@@ -3477,12 +3495,16 @@ function importFlow(silent) {
 
 const colorOptions = sel => [`<option value=""${sel ? "" : " selected"}>標準</option>`]
   .concat(BAR_COLORS.map(([v, n]) => `<option value="${v}"${sel === v ? " selected" : ""}>${n}</option>`)).join("");
+// 行の段：名前に「1.1.」のような番号があればそれ、なければ選んだ段（1=作業＝黄色の箱、2=小項目＝箱の中）
+const rowLevel = r => { const m = clean(r.name).match(PLAN_NUM_RE); return m ? (m[2] ? 2 : 1) : r.lv === "2" ? 2 : 1; };
+const isContRow = (r, i) => !clean(r.name) && !r.lv && i > 0;   // 「＋期間」の行（上の作業の別の期間）
 function rowHtml(r, i) {
-  const cont = !clean(r.name) && i > 0;
+  const cont = isContRow(r, i), lv = rowLevel(r);
   const inp = (k, type, extra = "") => `<input type="${type}" data-k="${k}" value="${esc(r[k])}"${extra}>`;
-  return `<tr data-id="${r.id}"${cont ? ' class="cont"' : ""}>`
+  const pick = cont ? "" : `<select data-k="lv" class="lv lv${lv}" aria-label="作業か小項目か" title="作業＝黄色の箱、小項目＝黄色の箱の中の作業"><option value="1"${lv === 1 ? " selected" : ""}>作業</option><option value="2"${lv === 2 ? " selected" : ""}>小項目</option></select>`;
+  return `<tr data-id="${r.id}" class="${cont ? "cont" : lv === 2 ? "sub" : ""}">`
     + `<td class="no">${i + 1}</td>`
-    + `<td class="name">${inp("name", "text", ` placeholder="${cont ? "（上の作業の別の期間）" : "作業項目"}" aria-label="作業項目"`)}</td>`
+    + `<td class="name"><div class="nm">${pick}${inp("name", "text", ` placeholder="${cont ? "（上の作業の別の期間）" : lv === 2 ? "小項目" : "作業項目"}" aria-label="作業項目"`)}</div></td>`
     + `<td>${inp("s", "date", ' aria-label="開始日"')}</td><td>${inp("e", "date", ' aria-label="終了日"')}</td><td>${inp("d", "number", ' min="1" step="1" aria-label="日数"')}</td>`
     + `<td class="chg">${inp("cs", "date", ' aria-label="変更後の開始日"')}</td><td class="chg">${inp("ce", "date", ' aria-label="変更後の終了日"')}</td><td class="chg">${inp("cd", "number", ' min="1" step="1" aria-label="変更後の日数"')}</td>`
     + `<td><select data-k="color" class="swatch" aria-label="バー色">${colorOptions(r.color)}</select></td>`
@@ -3507,7 +3529,7 @@ function planUpdate() {
   const bad = new Map(R.errors.filter(e => e.row >= 0).map(e => [e.row, e.text]));
   [...taskRows.querySelectorAll("tr[data-id]")].forEach((tr, i) => {
     tr.classList.toggle("bad", bad.has(i));
-    tr.classList.toggle("cont", !clean(sched.rows[i].name) && i > 0);
+    tr.classList.toggle("cont", isContRow(sched.rows[i], i));
     const x = R.rowRes[i], cell = tr.querySelector("td.res");
     if (!cell) return;
     if (!x) { cell.textContent = ""; return; }
@@ -3590,18 +3612,60 @@ function onField(e) {
   $(id).addEventListener("change", e => { onField(e); commit(); });
 });
 
+// 段を選んだり名前を打ったりしたら、番号（1. / 1.1.）を付け直す。
+// 番号のない行は、表のほかの行に番号があるときだけ番号を付ける（番号を使っていない表はそのまま）
+function setLevel(i, lv) {
+  const r = sched.rows[i], name = clean(r.name), m = name.match(PLAN_NUM_RE);
+  r.lv = String(lv);
+  if (!name) return;
+  // 番号を使っていない表なら、番号は付けない（段だけ覚える）
+  if (!m && !sched.rows.some((x, j) => j !== i && PLAN_NUM_RE.test(clean(x.name)))) return;
+  r.name = `${lv === 2 ? "0.0." : "0."}${clean(m ? name.slice(m[0].length) : name)}`;
+  renumberRows(sched.rows);
+}
+function numberName(i) {
+  const r = sched.rows[i], name = clean(r.name);
+  if (!name) return;
+  const m = name.match(PLAN_NUM_RE);
+  if (m) { r.lv = m[2] ? "2" : "1"; renumberRows(sched.rows); return; }
+  if (sched.rows.some((x, j) => j !== i && PLAN_NUM_RE.test(clean(x.name)))) setLevel(i, rowLevel(r));
+}
+function refreshRows() {
+  [...taskRows.querySelectorAll("tr[data-id]")].forEach((tr, i) => {
+    const r = sched.rows[i];
+    if (!r) return;
+    const inp = tr.querySelector('[data-k="name"]'), sel = tr.querySelector('[data-k="lv"]'), lv = rowLevel(r), cont = isContRow(r, i);
+    if (inp && document.activeElement !== inp) inp.value = r.name;
+    if (inp) inp.placeholder = cont ? "（上の作業の別の期間）" : lv === 2 ? "小項目" : "作業項目";
+    if (sel) { sel.value = String(lv); sel.className = `lv lv${lv}`; }
+    tr.className = cont ? "cont" : lv === 2 ? "sub" : "";
+  });
+}
+
 // 作業の表
 const rowIndexOf = el => { const tr = el.closest("tr[data-id]"); return tr ? sched.rows.findIndex(r => r.id === tr.dataset.id) : -1; };
 let planTimer = 0;
 taskRows.addEventListener("input", e => {
   const i = rowIndexOf(e.target), k = e.target.dataset.k;
   if (i < 0 || !k) return;
+  if (k === "lv") {
+    setLevel(i, +e.target.value);
+    refreshRows();
+    clearTimeout(planTimer);
+    planUpdate();
+    return;
+  }
   sched.rows[i][k] = e.target.value;
   if (k === "color") paintSwatches();
   clearTimeout(planTimer);
   planTimer = setTimeout(planUpdate, k === "name" || k === "note" ? 250 : 0);
 });
-taskRows.addEventListener("change", () => { clearTimeout(planTimer); planUpdate(); commit(); });
+taskRows.addEventListener("change", e => {
+  if (e.target.dataset.k === "name") { const i = rowIndexOf(e.target); if (i >= 0) { numberName(i); refreshRows(); } }
+  clearTimeout(planTimer);
+  planUpdate();
+  commit();
+});
 taskRows.addEventListener("click", e => {
   const b = e.target.closest("button[data-act]");
   if (!b) return;
@@ -3631,16 +3695,18 @@ taskRows.addEventListener("click", e => {
   }
   if (act === "del") toast(renumbered ? "行を消して、番号を詰めました。" : "行を消しました。", "元に戻す", undo);
 });
-$("btnAddRow").addEventListener("click", () => {
+const addTaskRow = lv => {
   commit();
-  const nr = newRow();
+  const nr = newRow({ lv: String(lv) });
   sched.rows.push(nr);
   renderTasks();
   planUpdate();
   commit();
   const el = taskRows.querySelector(`tr[data-id="${nr.id}"] [data-k="name"]`);
   if (el) el.focus();
-});
+};
+$("btnAddRow").addEventListener("click", () => addTaskRow(1));
+$("btnAddSub").addEventListener("click", () => addTaskRow(2));
 $("btnImport").addEventListener("click", () => importFlow(false));
 $("btnImport2").addEventListener("click", () => importFlow(false));
 $("btnExport").addEventListener("click", exportToFlow);
