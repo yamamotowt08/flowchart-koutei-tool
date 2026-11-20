@@ -2626,7 +2626,8 @@ const PLAN_SAMPLE = {
 };
 
 // ---------- 日数の計算（暦日 / 土日祝除く） ----------
-function computeSched(sc) {
+// 日数の数え方（暦日 / 土日祝除く、ほかの休み）にしたがって、日付を足し引きする道具
+function dayTools(sc) {
   const work = sc.cfg.dayMode === "work";
   const extra = new Set(), errors = [];
   clean(sc.cfg.extraOff || "").split(/[\n,、]+/).map(clean).filter(Boolean).forEach(part => {
@@ -2640,6 +2641,10 @@ function computeSched(sc) {
   const subDays = (e, d) => (work ? workDay(e + 1, -d) : e - d + 1);
   const nextStart = e => (work ? workDay(e, 1) : e + 1);
   const countDays = (s, e) => { if (!work) return e - s + 1; let c = 0; for (let x = s; x <= e; x++) if (!isOff(x)) c++; return c; };
+  return { work, isOff, addDays, subDays, nextStart, countDays, errors };
+}
+function computeSched(sc) {
+  const { work, isOff, addDays, subDays, nextStart, countDays, errors } = dayTools(sc);
   const readDays = (v, label, fail) => {
     v = toHalf(clean(v || ""));
     if (v === "") return null;
@@ -3605,6 +3610,7 @@ function onField(e) {
   else if (el.dataset.c) {
     sched.cfg[el.dataset.c] = el.type === "color" ? el.value.replace("#", "").toUpperCase() : el.value;
     if (el.dataset.c === "barColor") paintSwatches();
+    if (e.type === "change" && (el.dataset.c === "dayMode" || el.dataset.c === "extraOff")) { refillDays(); renderTasks(); }
   } else return;
   planUpdate();
   showHolidays();
@@ -3644,6 +3650,40 @@ function refreshRows() {
   });
 }
 
+// 開始日・終了日・日数のうち 2 つがそろったら、残りを計算して入れる（変更後も同じ）。
+// 日数を直したら終了日、終了日を直したら日数、開始日を直したら日数はそのままで終了日をずらす
+function autoFill(i, k) {
+  const r = sched.rows[i], t = dayTools(sched);
+  const sets = [["s", "e", "d"], ["cs", "ce", "cd"]].find(x => x.includes(k));
+  if (!sets) return;
+  const [ks, ke, kd] = sets, s = dayOf(r[ks]), e = dayOf(r[ke]);
+  const dv = toHalf(clean(r[kd] || "")), d = dv && isFinite(+dv) && +dv >= 1 ? Math.ceil(+dv) : null;
+  const put = (key, v) => { r[key] = v; };
+  if (k === ks) {
+    if (s === null) return;
+    if (d !== null) put(ke, isoOf(t.addDays(s, d)));
+    else if (e !== null && e >= s) put(kd, String(t.countDays(s, e)));
+  } else if (k === ke) {
+    if (e === null) return;
+    if (s !== null) { if (e >= s) put(kd, String(t.countDays(s, e))); }
+    else if (d !== null) put(ks, isoOf(t.subDays(e, d)));
+  } else {
+    if (d === null) return;
+    if (s !== null) put(ke, isoOf(t.addDays(s, d)));
+    else if (e !== null) put(ks, isoOf(t.subDays(e, d)));
+  }
+  const tr = taskRows.querySelector(`tr[data-id="${r.id}"]`);
+  if (tr) sets.forEach(key => { const el = tr.querySelector(`[data-k="${key}"]`); if (el && el.value !== r[key]) el.value = r[key]; });
+}
+// 日数の数え方や休みを変えたら、開始日と終了日がそろっている行の日数を数え直す
+function refillDays() {
+  const t = dayTools(sched);
+  sched.rows.forEach(r => [["s", "e", "d"], ["cs", "ce", "cd"]].forEach(([ks, ke, kd]) => {
+    const s = dayOf(r[ks]), e = dayOf(r[ke]);
+    if (s !== null && e !== null && e >= s && clean(r[kd] || "")) r[kd] = String(t.countDays(s, e));
+  }));
+}
+
 // 作業の表
 const rowIndexOf = el => { const tr = el.closest("tr[data-id]"); return tr ? sched.rows.findIndex(r => r.id === tr.dataset.id) : -1; };
 let planTimer = 0;
@@ -3664,6 +3704,7 @@ taskRows.addEventListener("input", e => {
 });
 taskRows.addEventListener("change", e => {
   if (e.target.dataset.k === "name") { const i = rowIndexOf(e.target); if (i >= 0) { numberName(i); refreshRows(); } }
+  if (["s", "e", "d", "cs", "ce", "cd"].includes(e.target.dataset.k)) { const i = rowIndexOf(e.target); if (i >= 0) autoFill(i, e.target.dataset.k); }
   clearTimeout(planTimer);
   planUpdate();
   commit();
