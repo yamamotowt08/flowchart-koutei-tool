@@ -2561,7 +2561,7 @@ const HEAD_FIELDS = [
 ];
 const BAR_COLORS = [["000000", "黒"], ["1F3864", "紺"], ["2E75B6", "青"], ["00B0F0", "水色"], ["548235", "緑"],
   ["BF9000", "黄土"], ["ED7D31", "橙"], ["C00000", "赤"], ["7030A0", "紫"], ["808080", "灰"]];
-const CFG_DEFAULT = { dayMode: "cal", barColor: "000000", barHeight: "35", chgColor: "C00000", oldStyle: "fill", extraOff: "" };
+const CFG_DEFAULT = { dayMode: "cal", barColor: "000000", barHeight: "35", chgColor: "C00000", oldStyle: "fill", extraOff: "", overlap: "side" };
 const ROW_FIELDS = ["name", "s", "e", "d", "cs", "ce", "cd", "color", "note", "lv"];
 
 const newRow = (o = {}) => Object.assign({ id: newId(), name: "", s: "", e: "", d: "", cs: "", ce: "", cd: "", color: "", note: "", lv: "" }, o);
@@ -3178,12 +3178,14 @@ function planItems() {
   const dated = groups.filter(gr => gr.d !== null), byDate = dated.slice().sort((a, b) => a.d - b.d);
   let k = 0;
   items.splice(0, items.length, ...groups.map(gr => (gr.d === null ? gr : byDate[k++])).flatMap(gr => gr.items));
-  // 工程表で打った作業で、すぐ上の本線の作業と期間が重なるものは、並行（左）にする（小項目も一緒）
+  // すぐ上の本線の作業と期間が重なる作業は、並行（左）にする（小項目も一緒。フローチャートから取り込んだ作業も）。
+  // もともと同時進行・並行（左）の作業はその形のまま。設定で「分けない」にしたら、日付では分けない
+  const split = sched.cfg.overlap !== "none";
   let main = null;
   items.forEach((it, i) => {
     if (it.depth !== 1 || isNoteItem(it)) return;
-    if (!it.typed) { if (it.fs.kind === "step") main = it; return; }
-    if (main && main.per && it.per && it.per.s <= main.per.e && it.per.e >= main.per.s) {
+    if (it.fs && it.fs.kind !== "step") return;
+    if (split && main && main.per && it.per && it.per.s <= main.per.e && it.per.e >= main.per.s) {
       it.fs = { kind: "side", grp: `date|${main.key}` };
       for (let j = i + 1; j < items.length && items[j].depth === 2; j++) if (!isNoteItem(items[j])) items[j].fs = { kind: "sub" };
     } else main = it;
@@ -3569,6 +3571,8 @@ function buildFields() {
     + `<label for="c_barHeight">バーの太さ（%）</label><input id="c_barHeight" type="number" min="10" max="90" step="5" data-c="barHeight">`
     + `<span class="note">行の高さに対する割合（10〜90）</span>`
     + `<label for="c_chgColor">変更後バーの色</label><input id="c_chgColor" type="color" data-c="chgColor">`
+    + `<label for="c_overlap">期間が重なる作業</label><select id="c_overlap" data-c="overlap"><option value="side">並行（左）に分ける</option><option value="none">分けない</option></select>`
+    + `<span class="note">フローチャートに反映するとき、すぐ上の作業と期間が重なる作業を左に枝分かれさせる</span>`
     + `<label for="c_oldStyle">変更前バーの表示</label><select id="c_oldStyle" data-c="oldStyle"><option value="fill">塗りつぶし</option><option value="dash">点線</option><option value="outline">白抜き</option></select>`
     + `<span class="note">変更があった作業の、上段（変更前）のバーの描き方</span>`
     + `<label for="c_extraOff">ほかの休み</label><textarea id="c_extraOff" data-c="extraOff" placeholder="2026/12/29〜2027/1/3&#10;2026/8/13"></textarea>`
