@@ -1460,6 +1460,9 @@ const ITEM_NUM_RE = /^[0-9０-９]+(?:[.．][0-9０-９]+)*[.．)）、:：]\s*/
 // 「@」の行では「、」「・」などが区切りなので、1 つの名前の中では見た目の近い別の字にしておく（読むときは元に戻す）
 const noteSafe = t => t.replace(/・/g, "･").replace(/[、,，]/g, "､").replace(/[\/／]/g, "∕");
 const noteUnsafe = t => t.replace(/･/g, "・").replace(/､/g, "、").replace(/∕/g, "／");
+// 小項目の名前が「第1回」「2回目」「③」のような回数だけなら親の名前（打合せ①②…と番号が付く）、ほかは「打合せ（…）」
+const COUNT_RE = /^(第\s*)?[0-9０-９]+\s*(回目?)?$|^[①-⑳]$|^[（(][0-9０-９]+[)）]$/;
+const noteLabel = (head, sub) => (COUNT_RE.test(clean(sub)) ? head : NOTE_LINE_RE.test(sub) ? sub : `${head}（${sub}）`);
 function convertNotes(num) {
   const { units, sides } = parse(ta.value, num, lineIds);
   const cur = document.activeElement === ta ? lineAt(ta.selectionStart) : -1;
@@ -1467,16 +1470,25 @@ function convertNotes(num) {
   const keep = new Set(sides.map(sd => units.indexOf(sd.after)));
   units.forEach(u => (u.chain || []).forEach(c => { const t = findTarget(c, units); if (t.index >= 0) keep.add(t.index); }));
   sides.forEach(sd => { if (sd.target) { const t = findTarget(sd.target, units); if (t.index >= 0) keep.add(t.index); } });
-  const change = [];
+  const change = [], drop = [];   // [行, 新しい名前（「、」で区切る）] と、消す行
   units.forEach((u, i) => {
-    if (i > 0 && u.kind === "proc" && !u.chain.length && !u.subs.length && !keep.has(i) && u.line !== cur && NOTE_LINE_RE.test(u.text)) change.push([u.line, strip(u.text)]);
-    (u.subs || []).forEach(sb => { if (sb.line !== cur && NOTE_LINE_RE.test(sb.text)) change.push([sb.line, strip(sb.text)]); });
+    const subs = u.subs || [];
+    if (i > 0 && u.kind === "proc" && !u.chain.length && !keep.has(i) && NOTE_LINE_RE.test(u.text) && u.line !== cur && !subs.some(sb => sb.line === cur)) {
+      // 手順そのものが照査・打合せ：小項目があれば、それぞれを照査・打合せの箱にする
+      const head = strip(u.text);
+      change.push([u.line, subs.length ? subs.map(sb => noteSafe(noteLabel(head, strip(sb.text)))) : [noteSafe(head)]]);
+      subs.forEach(sb => drop.push(sb.line));
+      return;
+    }
+    subs.forEach(sb => { if (sb.line !== cur && NOTE_LINE_RE.test(sb.text)) change.push([sb.line, [noteSafe(strip(sb.text))]]); });
   });
   if (!change.length) return 0;
   if (!jumpRefs) rememberJumps(units);   // 書き換えでずれる「#番号」を付け直せるように
   const lines = ta.value.replace(/\r\n?/g, "\n").split("\n"), at = [0];
   lines.forEach((ln, i) => { at[i + 1] = at[i] + ln.length + 1; });
-  applyEdits(change.sort((x, y) => x[0] - y[0]).map(([ln, t]) => [at[ln], at[ln] + lines[ln].length, `@${noteSafe(t)}`]));
+  const edits = change.map(([ln, items]) => [at[ln], at[ln] + lines[ln].length, `@${items.join("、")}`])
+    .concat(drop.map(ln => (ln + 1 < lines.length ? [at[ln], at[ln + 1], ""] : [at[ln] - 1, at[ln] + lines[ln].length, ""])));
+  applyEdits(edits.sort((x, y) => x[0] - y[0]));
   renumberJumps(num);
   return change.length;
 }
@@ -3029,39 +3041,49 @@ function computePlan() {
 const itemKey = name => clean(toHalf(noteUnsafe(clean(name))).replace(/^[0-9]+(?:\.[0-9]+)*[.)）、:：]?\s*/, ""));
 // フローチャートの作業（四角の箱）を、手順の欄のどこにあるかと一緒に並べる
 //   kind: step=本線の手順 / sub=小項目 / lane=同時進行の中 / side=並行（左）の中 / note=照査・打合せ
+// 照査・打合せの付け先の名前：手順はその名前、同時進行のかたまりは「[最初の作業]」
+const unitAnchor = u => {
+  const strip = t => clean(clean(t || "").replace(ITEM_NUM_RE, ""));
+  return u.kind === "block" ? `[${itemKey(strip(u.lanes[0] && u.lanes[0][0] && u.lanes[0][0].text))}]` : itemKey(strip(u.text));
+};
+// 照査・打合せは 1 つずつ、付いている手順（anchor）と場所（place：head=見出しの横 / betweenN=小項目 N のあと / after=手順のあと）を持つ
 function flowItems() {
   const { units, sides } = parse(ta.value, true, lineIds);
-  const out = [], notes = [];
+  const out = [];
   const after = new Map();
   sides.forEach(sd => { const a = after.get(sd.after) || []; a.push(sd); after.set(sd.after, a); });
   const strip = t => clean(clean(t).replace(ITEM_NUM_RE, ""));
-  const src = ta.value.replace(/\r\n?/g, "\n").split("\n");
-  const step = (st, unit, kind, shape = {}) => {
-    if (st.kind !== "proc" || !strip(st.text)) return;
-    const k = kind === "step" ? 0 : +String(st.uid).split(/\|<?/).pop();
-    out.push({ text: strip(st.text), depth: 1, kind, unit, line: st.line, k, shape: Object.assign({ kind }, shape) });
-    (st.subs || []).forEach(sb => { if (strip(sb.text)) out.push({ text: strip(sb.text), depth: 2, kind: "sub", unit, line: sb.line, shape: { kind: "sub" } }); });
-  };
   // 合流先は、名前が 1 つだけならその名前、ほかは書いてあったとおり
   const targetName = t => {
     if (!t) return "";
     const r = findTarget(t, units), u = r.index >= 0 ? units[r.index] : null;
     return u && u.kind !== "block" && u.text && units.filter(x => x.text === u.text).length === 1 ? strip(u.text) : t;
   };
-  const noteAt = {};   // 照査・打合せの名前 → もとの「@」の行と、付いていた手順・場所
+  const anchorOf = unitAnchor;
+  const placeOf = (u, pos) => { const k = u.kind === "block" ? 0 : (u.subs || []).length; return k && pos === 0 ? "head" : pos > 0 && pos < k ? `between${pos}` : "after"; };
+  const notesOf = (u, which) => (u.notes || []).filter(nt => which(placeOf(u, nt.pos))).flatMap(nt => nt.items.map((t, idx) => ({ t: noteUnsafe(strip(t)), idx, nt })))
+    .filter(x => x.t).map(x => {
+      const inBox = u.kind === "proc" || u.kind === "block";   // 工程表では、付いている手順のすぐ下（2 段目）に並べる
+      return { text: x.t, depth: inBox ? 2 : 1, kind: "note", unit: null, line: x.nt.line, idx: x.idx, anchor: anchorOf(u), place: placeOf(u, x.nt.pos),
+               shape: inBox ? { kind: "note" } : { kind: "note", anchor: anchorOf(u) } };
+    });
+  const step = (st, unit, kind, shape = {}, u = null) => {
+    if (st.kind !== "proc" || !strip(st.text)) return;
+    const k = kind === "step" ? 0 : +String(st.uid).split(/\|<?/).pop();
+    out.push({ text: strip(st.text), depth: 1, kind, unit, line: st.line, k, shape: Object.assign({ kind }, shape) });
+    if (u) out.push(...notesOf(u, p => p === "head"));
+    (st.subs || []).forEach((sb, j) => {
+      if (strip(sb.text)) out.push({ text: strip(sb.text), depth: 2, kind: "sub", unit, line: sb.line, shape: { kind: "sub" } });
+      if (u) out.push(...notesOf(u, p => p === `between${j + 1}`));
+    });
+  };
   units.forEach((u, i) => {
     if (u.kind === "block") u.lanes.forEach((l, j) => l.forEach(st => step(st, i, "lane", { blk: u.uid, lane: j })));
-    else step(u, i, "step");
-    const anchor = u.kind === "block" ? itemKey(strip((u.lanes[0] && u.lanes[0][0] && u.lanes[0][0].text) || "")) : itemKey(strip(u.text));
-    (u.notes || []).forEach(nt => nt.items.forEach(t => {
-      t = noteUnsafe(strip(t));
-      if (!t) return;
-      if (!notes.includes(t)) notes.push(t);
-      (noteAt[t] = noteAt[t] || []).push({ line: clean(src[nt.line] || ""), anchor, pos: Number.isFinite(nt.pos) ? nt.pos : -1 });
-    }));
+    else step(u, i, "step", {}, u);
     (after.get(u) || []).forEach(sd => sd.items.forEach(st => step(st, i, "side", { grp: lineIds[sd.line], target: targetName(sd.target) })));
+    // 手順のあとの照査・打合せ（開始・判断などに付いているものは、その全部）
+    out.push(...notesOf(u, p => u.kind !== "proc" || u.subs.length === 0 || p === "after" || !(u.text && strip(u.text))));
   });
-  notes.forEach(t => out.push({ text: t, depth: 1, kind: "note", unit: null, shape: { kind: "note", at: noteAt[t] || [] } }));
   out.forEach(it => { it.key = itemKey(it.text); if (it.line !== undefined) it.id = lineIds[it.line]; });
   return out;
 }
@@ -3069,7 +3091,8 @@ function flowTasks() {
   let n = 0, m = 0;
   return flowItems().map(it => (it.depth === 1 ? `${++n}.${(m = 0, it.text)}` : `${n}.${++m}.${it.text}`));
 }
-const signature = items => items.filter(it => !isNoteItem(it)).map(it => it.key).join("\n") + "\n@" + items.filter(isNoteItem).map(it => it.key).sort().join("\n");
+const noteSig = it => `${it.key}|${it.anchor}|${it.place}`;
+const signature = items => items.filter(it => !isNoteItem(it)).map(it => it.key).join("\n") + "\n@" + items.filter(isNoteItem).map(noteSig).sort().join("\n");
 const isNoteItem = it => (it.fs ? it.fs.kind : it.kind) === "note";
 const flowSignature = () => signature(flowItems());
 const planSignature = () => signature(planItems());
@@ -3109,9 +3132,21 @@ function planItems() {
     const text = clean(m ? name.slice(m[0].length) : name) || name;
     const depth = m && m[2] ? 2 : 1, key = itemKey(text);
     // 形を覚えていない行（工程表で打った行）は、照査・打合せらしい名前なら直前の手順から横に分ける
-    const fs = NOTE_NAME_RE.test(text) && !(r.fs && ["note", "lane", "side"].includes(r.fs.kind)) ? { kind: "note", at: [] } : r.fs || null;
+    const fs = NOTE_NAME_RE.test(text) && !(r.fs && ["note", "lane", "side"].includes(r.fs.kind)) ? { kind: "note" } : r.fs || null;
     items.push({ text, depth, key, fs, typed: !r.fs, per: grow(null, res[i]) });
   });
+  // 「3.打合せ」の下に「3.1.第1回」などがあれば、見出しの打合せは消して、下の行をそれぞれ打合せの箱にする（打合せ①②…）
+  for (let i = 0; i < items.length; i++) {
+    const h = items[i];
+    if (h.depth !== 1 || !isNoteItem(h) || !items[i + 1] || items[i + 1].depth !== 2) continue;
+    for (let j = i + 1; j < items.length && items[j].depth === 2; j++) {
+      const c = items[j];
+      if (!isNoteItem(c)) { c.text = noteLabel(h.text, c.text); c.key = itemKey(c.text); c.fs = { kind: "note" }; }
+      c.per = c.per || h.per;
+    }
+    items.splice(i, 1);
+    i--;
+  }
   // 日付のない見出しの行は、その下の小項目の期間をまとめて使う
   items.forEach((it, i) => {
     if (it.depth !== 1 || it.per) return;
@@ -3145,40 +3180,60 @@ function planItems() {
       for (let j = i + 1; j < items.length && items[j].depth === 2; j++) if (!isNoteItem(items[j])) items[j].fs = { kind: "sub" };
     } else main = it;
   });
-  // 照査・打合せ（工程表で打ったもの）を付ける手順：直前の本線の手順
-  let anchor = "";
-  items.forEach(it => {
-    it.anchor = anchor;
-    if (it.depth === 1 && (!it.fs || it.fs.kind === "step")) anchor = it.key;
+  // 照査・打合せの付け先：工程表で置いた場所。直前の本線の手順（同時進行なら、そのかたまり）と、
+  // その小項目の何番目のあとか（見出しの横 / 小項目の間 / 手順のあと）
+  let anc = null, lane = null, laneBlk = null, cnt = 0, nSubs = 0, pastSide = false;
+  items.forEach((it, i) => {
+    const fs = it.fs || {};
+    if (isNoteItem(it)) {
+      if (fs.anchor) { it.anchor = fs.anchor; it.place = "after"; }
+      else if (lane) { it.anchor = lane; it.place = "after"; }
+      else if (anc) { it.anchor = anc; it.place = it.depth === 1 || pastSide ? "after" : nSubs && !cnt ? "head" : cnt && cnt < nSubs ? `between${cnt}` : "after"; }
+      else { it.anchor = ""; it.place = "after"; }
+      return;
+    }
+    if (it.depth === 2) { if (!pastSide) cnt++; return; }
+    if (fs.kind === "side") { pastSide = true; return; }
+    if (fs.kind === "lane") { if (laneBlk !== fs.blk) { laneBlk = fs.blk; lane = `[${it.key}]`; } return; }
+    anc = it.key; lane = laneBlk = null; cnt = 0; pastSide = false;
+    nSubs = 0;
+    for (let j = i + 1; j < items.length && !(items[j].depth === 1 && !isNoteItem(items[j])); j++) if (items[j].depth === 2 && !isNoteItem(items[j])) nSubs++;
   });
+  // 付け先（開始など）がフローチャートにも工程表にもないときは、反映するときと同じく「いちばん上の作業のかたまりのあと」にする
+  const { units } = parse(ta.value, true, lineIds);
+  const ok = new Set(units.map(unitAnchor));
+  items.forEach(it => { if (!isNoteItem(it) && it.depth === 1) ok.add((it.fs || {}).kind === "lane" ? `[${it.key}]` : it.key); });
+  const firstUnit = units.find(u => !(u.kind === "term" && isWord(u.text, START_WORDS)));
+  const firstItem = items.find(it => it.depth === 1 && !isNoteItem(it) && (it.fs || {}).kind !== "side");
+  const fallback = firstUnit ? unitAnchor(firstUnit) : firstItem ? ((firstItem.fs || {}).kind === "lane" ? `[${firstItem.key}]` : firstItem.key) : "";
+  items.forEach(it => { if (isNoteItem(it) && !ok.has(it.anchor)) { it.anchor = fallback; it.place = "after"; } });
   return items;
 }
 // 手順の行か（小項目・同時進行・並行・照査打合せ・メモの行ではない）と、その手順の名前
 const isStepRow = t => { t = clean(t); return !!t && !/^[・･\-*|｜<＜@＠※'\/]/.test(t); };
 const stepKeyOf = t => itemKey(clean(clean(t).replace(/^[○◯◇◆□■][\s　]/, "").split(/[>＞]/)[0]).replace(ITEM_NUM_RE, ""));
-function placeNotes(rows, adds, P, fallback) {
-  if (!adds.length) return;
-  const want = new Set(adds.map(p => p.key)), done = new Set(), lines = [];
-  // 取り込んだときの「@」の行をそのまま戻す（ほかの照査・打合せと一緒の行なら、工程表にあるものだけ残す）
-  for (const p of adds) for (const a of (p.fs.at || [])) {
-    const id = `${a.line}|${a.anchor}|${a.pos}`;
-    if (done.has(id)) continue;
-    done.add(id);
-    const items = clean(a.line).replace(NOTE_RE, "").split(/[、,，・\/／]/).map(clean).filter(t => t && P.some(q => q.key === itemKey(t)));
-    if (items.some(t => want.has(itemKey(t)))) lines.push({ items, anchor: a.anchor, pos: a.pos });
-  }
-  // 工程表で打った照査・打合せは、直前の手順のあとに付ける（続いていれば 1 行にまとめる）
+function placeNotes(rows, adds, fallback) {
+  // 同じ付け先・場所のものは 1 行にまとめる
+  const lines = [];
   for (const p of adds) {
-    if ((p.fs.at || []).length) continue;
-    const last = lines[lines.length - 1];
-    if (last && last.anchor === p.anchor && last.pos === -1 && last.typed) last.items.push(p.text);
-    else lines.push({ items: [p.text], anchor: p.anchor, pos: -1, typed: true });
+    const l = lines.find(x => x.anchor === p.anchor && x.place === p.place);
+    if (l) l.items.push(p.text); else lines.push({ anchor: p.anchor, place: p.place, items: [p.text] });
   }
   for (const l of lines) {
     const row = { t: `@${l.items.map(noteSafe).join("、")}`, id: newId() };
-    const a = rows.findIndex(r => isStepRow(r.t) && stepKeyOf(r.t) === l.anchor);
+    if (/^\[.*\]$/.test(l.anchor)) {
+      // 同時進行のかたまりのあと
+      const k = l.anchor.slice(1, -1);
+      let a = rows.findIndex(r => LANE_RE.test(clean(r.t)) && laneParts(r.t).some(t => itemKey(clean(t.replace(ITEM_NUM_RE, ""))) === k));
+      if (a >= 0) {
+        while (a + 1 < rows.length && LANE_RE.test(clean(rows[a + 1].t))) a++;
+        rows.splice(a + 1, 0, row);
+        continue;
+      }
+    }
+    const a = l.anchor ? rows.findIndex(r => isStepRow(r.t) && stepKeyOf(r.t) === l.anchor) : -1;
     if (a < 0) {
-      // 付いていた手順（開始など）がないときは、いちばん上の作業のかたまりのあとに付ける
+      // 付ける手順（開始など）がないときは、いちばん上の作業のかたまりのあとに付ける
       let f = rows.findIndex(r => (isStepRow(r.t) && !isWord(stepKeyOf(r.t), START_WORDS)) || LANE_RE.test(clean(r.t)));
       if (f < 0) { insertAt(rows, fallback, [row]); continue; }
       const lane = LANE_RE.test(clean(rows[f].t));
@@ -3187,14 +3242,14 @@ function placeNotes(rows, adds, P, fallback) {
       rows.splice(f, 0, row);
       continue;
     }
+    // 見出しの横はすぐ下、小項目 N のあとはその小項目の下、手順のあとはそのかたまりの最後
     let at = a + 1;
-    if (l.pos !== 0) {
-      // 小項目の pos 番目のあと／手順のかたまりの最後
+    if (l.place !== "head") {
+      const j = l.place.startsWith("between") ? +l.place.slice(7) : Infinity;
       let subs = 0;
       while (at < rows.length && !isStepRow(rows[at].t) && !LANE_RE.test(clean(rows[at].t))) {
-        const t = clean(rows[at].t);
-        if (SUB_RE.test(t)) { if (l.pos > 0 && subs === l.pos) break; subs++; }
-        else if (l.pos > 0 && subs === l.pos) break;
+        if (subs === j) break;
+        if (SUB_RE.test(clean(rows[at].t))) subs++;
         at++;
       }
     }
@@ -3258,12 +3313,19 @@ function exportToFlow() {
     ins.slice(k).forEach(o => ops.push(o));
   }
   {
-    const FN = FA.filter(isNoteItem), PN = PA.filter(isNoteItem);
-    const fOnly = FN.filter(f => !PN.some(p => p.key === f.key)), pOnly = PN.filter(p => !FN.some(f => f.key === p.key));
-    const k = Math.min(fOnly.length, pOnly.length);
-    for (let y = 0; y < k; y++) ops.push({ f: fOnly[y], p: pOnly[y], rename: true });
-    fOnly.slice(k).forEach(f => ops.push({ f, del: true }));
-    pOnly.slice(k).forEach(p => ops.push({ p, add: true }));
+    // 照査・打合せは 1 つずつ、名前・付け先・場所が同じものどうしを合わせる。
+    // 付け先と場所が同じで名前だけちがえば名前の変更、残りは消す・足す（＝工程表で動かした所へ移る）
+    const FN = FA.filter(isNoteItem), PN = PA.filter(isNoteItem), used = new Set(), pLeft = [];
+    PN.forEach(p => { const f = FN.find(x => !used.has(x) && noteSig(x) === noteSig(p)); if (f) used.add(f); else pLeft.push(p); });
+    const fLeft = FN.filter(f => !used.has(f));
+    for (const p of pLeft.slice()) {
+      const f = fLeft.find(x => x.anchor === p.anchor && x.place === p.place);
+      if (!f) continue;
+      fLeft.splice(fLeft.indexOf(f), 1); pLeft.splice(pLeft.indexOf(p), 1);
+      ops.push({ f, p, rename: true });
+    }
+    fLeft.forEach(f => ops.push({ f, del: true }));
+    pLeft.forEach(p => ops.push({ p, add: true }));
   }
   if (!ops.some(o => o.rename || o.del || o.add)) {
     if (!sorted) { toast("フローチャートは、工程表の作業項目と同じです。"); return; }
@@ -3295,21 +3357,14 @@ function exportToFlow() {
     }
     return segs.get(f.id);
   };
-  const noteEdit = (rows, from, to) => rows.forEach((r, x) => {
-    if (!lineInfo[lineIds.indexOf(r.id)] || lineInfo[lineIds.indexOf(r.id)].type !== "memo") return;
-    const items = clean(r.t).replace(NOTE_RE, "").split(/[、,，・\/／]/).map(clean).filter(Boolean);
-    if (!items.some(t => itemKey(t) === itemKey(from))) return;
-    const next = items.map(t => (itemKey(t) === itemKey(from) ? (to && noteSafe(to)) : t)).filter(Boolean);
-    if (next.length) rows[x].t = `@${next.join("、")}`; else drop.add(r.id);
-  });
-  const counts = { add: 0, rename: 0, del: 0 }, notesToAdd = [];
+  const counts = { add: 0, rename: 0, del: 0 }, notesToAdd = [], noteMods = {};
   editRows(rows => {
     for (let x = 0; x < ops.length; x++) {
       const o = ops[x], f = o.f;
       if (o.rename || o.del) {
         counts[o.del ? "del" : "rename"]++;
         const to = o.del ? null : o.p.text;
-        if (f.kind === "note") noteEdit(rows, f.text, to);
+        if (f.kind === "note") (noteMods[f.id] = noteMods[f.id] || []).push({ idx: f.idx, to });
         else if (f.kind === "lane" || f.kind === "side") seg(rows, f).parts[f.k] = to;
         else if (o.del) drop.add(f.id);
         else { const r = rows[rowAt(rows, f.id)]; r.t = r.t.includes(f.text) ? r.t.replace(f.text, to) : (f.kind === "sub" ? `・${to}` : to); }
@@ -3355,7 +3410,16 @@ function exportToFlow() {
       if (f.unit !== null) slot1 = { after: lineIds[unitEnd(f.unit)] };
       slot2 = f.kind === "step" || f.kind === "sub" || f.kind === "side" ? f.id : null;
     }
-    placeNotes(rows, notesToAdd, PA, slot1);
+    // 照査・打合せの「@」の行：名前の変更・消すは、その 1 つだけを書き換える
+    for (const [id, mods] of Object.entries(noteMods)) {
+      const x = rowAt(rows, id);
+      if (x < 0) continue;
+      const items = clean(rows[x].t).replace(NOTE_RE, "").split(/[、,，・\/／]/).map(clean).filter(Boolean);
+      mods.forEach(md => { items[md.idx] = md.to === null ? null : noteSafe(md.to); });
+      const left = items.filter(t => t !== null);
+      if (left.length) rows[x].t = `@${left.join("、")}`; else drop.add(id);
+    }
+    placeNotes(rows, notesToAdd, slot1);
     for (const [id, sg] of segs) {
       const parts = sg.parts.filter(Boolean), x = rowAt(rows, id);
       if (!parts.length) { drop.add(id); continue; }
