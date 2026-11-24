@@ -186,6 +186,7 @@ table.tasks { border-collapse: collapse; width: 100%; min-width: 1240px; font-si
 .tasks .nm input { flex: 1; min-width: 0; }
 .tasks select.lv { width: auto; flex: none; padding: 4px 4px; font-size: 12px; }
 .tasks select.lv1 { background: var(--box-soft); }
+.tasks select.lvb { background: #FBE3EC; }
 .tasks tr.sub .nm { padding-left: 1.4em; }
 .tasks tr.cont td.name input::placeholder { color: var(--muted); }
 .tasks tr.bad td { background: var(--warn-soft); }
@@ -252,6 +253,7 @@ table.tasks { border-collapse: collapse; width: 100%; min-width: 1240px; font-si
         <button class="chip" type="button" data-ins="memo"><svg viewBox="0 0 16 12"><circle cx="3" cy="6" r="1.6"/><path d="M5 6H9"/><rect x="9.5" y="3" width="6" height="6"/></svg>照査・打合せ</button>
         <button class="chip" type="button" data-ins="meet"><svg viewBox="0 0 16 12"><circle cx="3" cy="6" r="1.6"/><path d="M5 6H9"/><rect x="9.5" y="3" width="6" height="6"/></svg>打合せ</button>
         <button class="chip" type="button" data-ins="side"><svg viewBox="0 0 16 12"><path d="M14 1V11M14 3H4V8"/><rect x="1" y="8" width="6" height="3.5"/></svg>並行（左）</button>
+        <button class="chip" type="button" data-ins="branch" title="右に分かれる箱を足します。名前は自由で、番号は付きません"><svg viewBox="0 0 16 12"><circle cx="3" cy="6" r="1.6"/><path d="M5 6H9"/><rect x="9.5" y="3" width="6" height="6"/></svg>枝分かれ</button>
       </div>
 
       <div class="editor">
@@ -268,6 +270,7 @@ table.tasks { border-collapse: collapse; width: 100%; min-width: 1240px; font-si
           <tr><td>照査・打合せ</td><td>@照査、打合せ</td></tr>
           <tr><td>打合せ</td><td>@打合せ</td></tr>
           <tr><td>並行（左）</td><td>&lt; 作業 &gt; 合流先</td></tr>
+          <tr><td>枝分かれ</td><td>@名前（名前は自由。照査・打合せ以外は番号なし）</td></tr>
         </table>
       </details>
     </section>
@@ -780,7 +783,7 @@ function layout(g, o) {
       const items = grp.items.map(t => {
         const base = clean(t);
         counts[base] = (counts[base] || 0) + 1;
-        const label = o.num && !/[①-⑳]$/.test(base) ? base + CIRCLED(counts[base]) : base;
+        const label = o.num && NOTE_LINE_RE.test(base) && !/[①-⑳]$/.test(base) ? base + CIRCLED(counts[base]) : base;
         const cat = /照査/.test(base) ? "check" : /打合|打ち合|協議|会議/.test(base) ? "meet" : "other";
         return { kind: "note", text: base, label, cat, line: grp.line, look: "proc", w: noteW, h: noteH, unit: i, pos: grp.pos, uid: `${grp.uid}|n${grp.items.indexOf(t)}` };
       });
@@ -862,11 +865,11 @@ function layout(g, o) {
     }
   }
 
-  // 照査①・打合せ①… も、位置の上から順に付け直す
+  // 照査①・打合せ①… も、位置の上から順に付け直す（ほかの名前の枝分かれには番号を付けない）
   if (o.num) {
     const k = {};
     for (const it of byPosition(L.notes)) {
-      if (/[①-⑳]$/.test(it.text)) continue;
+      if (!NOTE_LINE_RE.test(it.text) || /[①-⑳]$/.test(it.text)) continue;
       k[it.text] = (k[it.text] || 0) + 1;
       it.label = it.text + CIRCLED(k[it.text]);
     }
@@ -1696,6 +1699,7 @@ const INSERTS = {
   memo: () => insertLine("@照査、打合せ", 1, 6),
   meet: () => insertLine("@打合せ", 1, 3),
   side: () => insertLine("< 並行する作業 > #1", 2, 6),
+  branch: () => insertLine("@名前", 1, 2),
 };
 document.querySelectorAll("[data-ins]").forEach(b => b.addEventListener("click", () => INSERTS[b.dataset.ins]()));
 
@@ -3510,10 +3514,19 @@ const colorOptions = sel => [`<option value=""${sel ? "" : " selected"}>標準</
 // 行の段：名前に「1.1.」のような番号があればそれ、なければ選んだ段（1=作業＝黄色の箱、2=小項目＝箱の中）
 const rowLevel = r => { const m = clean(r.name).match(PLAN_NUM_RE); return m ? (m[2] ? 2 : 1) : r.lv === "2" ? 2 : 1; };
 const isContRow = (r, i) => !clean(r.name) && !r.lv && i > 0;   // 「＋期間」の行（上の作業の別の期間）
+// 枝分かれ（右に分かれる箱）の行：「枝分かれ」を選んだ行か、フローチャートの @ の行。照査・打合せは名前だけで必ず枝分かれ
+const isBranchRow = r => {
+  const name = clean(r.name), m = name.match(PLAN_NUM_RE), text = clean(m ? name.slice(m[0].length) : name);
+  return (r.fs && r.fs.kind === "note") || (NOTE_NAME_RE.test(text) && !(r.fs && ["lane", "side"].includes(r.fs.kind)));
+};
+const LV_TITLE = "作業＝黄色の箱、小項目＝黄色の箱の中の作業、枝分かれ＝右に分かれる箱（照査・打合せと同じ形。名前は自由で、照査・打合せ以外は番号なし）";
+const lvPick = (r, lv) => { const v = isBranchRow(r) ? "b" : String(lv); return { v, cls: `lv lv${v}` }; };
 function rowHtml(r, i) {
   const cont = isContRow(r, i), lv = rowLevel(r);
   const inp = (k, type, extra = "") => `<input type="${type}" data-k="${k}" value="${esc(r[k])}"${extra}>`;
-  const pick = cont ? "" : `<select data-k="lv" class="lv lv${lv}" aria-label="作業か小項目か" title="作業＝黄色の箱、小項目＝黄色の箱の中の作業"><option value="1"${lv === 1 ? " selected" : ""}>作業</option><option value="2"${lv === 2 ? " selected" : ""}>小項目</option></select>`;
+  const lp = lvPick(r, lv);
+  const pick = cont ? "" : `<select data-k="lv" class="${lp.cls}" aria-label="作業・小項目・枝分かれ" title="${LV_TITLE}">`
+    + [["1", "作業"], ["2", "小項目"], ["b", "枝分かれ"]].map(([v, t]) => `<option value="${v}"${lp.v === v ? " selected" : ""}>${t}</option>`).join("") + `</select>`;
   return `<tr data-id="${r.id}" class="${cont ? "cont" : lv === 2 ? "sub" : ""}">`
     + `<td class="no" title="つかんで上下にドラッグすると、行を動かせます">${i + 1}</td>`
     + `<td class="name"><div class="nm">${pick}${inp("name", "text", ` placeholder="${cont ? "（上の作業の別の期間）" : lv === 2 ? "小項目" : "作業項目"}" aria-label="作業項目"`)}</div></td>`
@@ -3652,7 +3665,7 @@ function refreshRows() {
     const inp = tr.querySelector('[data-k="name"]'), sel = tr.querySelector('[data-k="lv"]'), lv = rowLevel(r), cont = isContRow(r, i);
     if (inp && document.activeElement !== inp) inp.value = r.name;
     if (inp) inp.placeholder = cont ? "（上の作業の別の期間）" : lv === 2 ? "小項目" : "作業項目";
-    if (sel) { sel.value = String(lv); sel.className = `lv lv${lv}`; }
+    if (sel) { const lp = lvPick(r, lv); sel.value = lp.v; sel.className = lp.cls; }
     tr.className = cont ? "cont" : lv === 2 ? "sub" : "";
   });
 }
@@ -3698,7 +3711,13 @@ taskRows.addEventListener("input", e => {
   const i = rowIndexOf(e.target), k = e.target.dataset.k;
   if (i < 0 || !k) return;
   if (k === "lv") {
-    setLevel(i, +e.target.value);
+    const r = sched.rows[i], v = e.target.value;
+    if (v === "b") r.fs = { kind: "note" };   // 右に分かれる箱にする（段と番号はそのまま）
+    else {
+      if (r.fs && r.fs.kind === "note") r.fs = null;
+      setLevel(i, +v);
+      if (isBranchRow(r)) toast("照査・打合せの名前の行は、必ず枝分かれになります。");
+    }
     refreshRows();
     clearTimeout(planTimer);
     planUpdate();
