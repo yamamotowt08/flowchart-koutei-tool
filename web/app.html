@@ -206,6 +206,8 @@ table.reptbl th, table.reptbl td { border-bottom: 1px solid var(--rule); padding
 table.reptbl th { color: var(--muted); font-weight: 600; }
 table.reptbl th:first-child, table.reptbl td:first-child { text-align: left; }
 table.reptbl input { width: 6.5em; text-align: right; }
+table.reptbl td.mn input { width: 100%; min-width: 14em; text-align: left; }
+table.reptbl th.mn, table.reptbl td.mn { text-align: left; }
 table.reptbl tr.cur td { background: var(--accent-soft); font-weight: 700; }
 table.reptbl tr.after td { color: var(--muted); }
 table.reptbl .minus { color: var(--chg); }
@@ -401,7 +403,7 @@ table.reptbl.items tr.top td:first-child { font-weight: 700; }
         <p class="hint">実績の値が計算とちがう月は、「実績」の欄に数字（%）を入れると置き換わります。空にすると計算の値に戻ります。</p>
         <div class="rep-wrap">
           <table class="reptbl">
-            <thead><tr><th>月（月末）</th><th>計画</th><th>実績</th><th>差</th></tr></thead>
+            <thead><tr><th>月（月末）</th><th>計画</th><th>実績</th><th>差</th><th class="mn">備考</th></tr></thead>
             <tbody id="repRows"></tbody>
           </table>
         </div>
@@ -2672,9 +2674,9 @@ function defaultSched() {
   return { head, cfg: Object.assign({}, CFG_DEFAULT), rows: [], ignoreSync: "", report: defaultReport() };
 }
 // 履行報告書：報告する月（2026-05）、報告日、文章（空なら工程表から作る）、手で入れた実施の進捗率（月ごと、%）
-const REP_TEXT = ["form", "month", "date", "done", "next", "remarks"];
+const REP_TEXT = ["form", "month", "date", "kStart", "kEnd", "done", "next", "remarks"];
 // form：rep＝履行報告書、gyomu＝業務履行報告書（作業項目ごとの進捗の表も付ける）
-const defaultReport = () => ({ form: "rep", month: "", date: "", done: "", next: "", remarks: "", actual: {} });
+const defaultReport = () => ({ form: "rep", month: "", date: "", kStart: "", kEnd: "", done: "", next: "", remarks: "", actual: {}, mnote: {} });
 function normalizeSched(o) {
   const sc = defaultSched();
   if (!o || typeof o !== "object") return sc;
@@ -2691,8 +2693,10 @@ function normalizeSched(o) {
   if (o.noAuto === true) sc.noAuto = true;
   if (o.report && typeof o.report === "object") {
     REP_TEXT.forEach(k => { if (typeof o.report[k] === "string") sc.report[k] = o.report[k]; });
-    if (o.report.actual && typeof o.report.actual === "object")
-      Object.entries(o.report.actual).forEach(([k, v]) => { if (/^\d{4}-\d{2}$/.test(k) && typeof v === "string") sc.report.actual[k] = v; });
+    ["actual", "mnote"].forEach(f => {
+      if (o.report[f] && typeof o.report[f] === "object")
+        Object.entries(o.report[f]).forEach(([k, v]) => { if (/^\d{4}-\d{2}$/.test(k) && typeof v === "string") sc.report[f][k] = v; });
+    });
   }
   return sc;
 }
@@ -4054,7 +4058,30 @@ function reportModel(sc) {
     items.push({ name: it.name, depth, plan: pl, act: ac, period: `${md(ps)}〜${md(pe)}${n > 1 ? `（${n}回）` : ""}`,
                  change: as !== ps || ae !== pe ? `${md(as)}〜${md(ae)}` : "", state });
   });
-  return { R, months, k, cur, S, E, date: dayOf(rp.date) ?? cur.last, doneAuto, nextAuto, items };
+  // 業務履行報告書：月ごとの備考の案（その月にかかっている作業。小項目は上の作業の名前、照査・打合せは除く）
+  const depthOf = i => { const row = sc.rows[R.items[i].row]; return row ? rowLevel(row) : 1; };
+  const topOf = i => { let j = i; while (j > 0 && depthOf(j) === 2) j--; return j; };
+  months.forEach(x => {
+    const names = [...new Set(act.filter(p => p.s <= x.last && p.e >= x.first).map(p => topOf(p.item)))].sort((a, b) => a - b)
+      .map(nameOf).filter(n => n && !/^(照査|打ち?合わ?せ?)/.test(n));
+    x.noteAuto = names.join("、");
+  });
+  // 業務工程表の行：作業項目ごとの計画と実績の期間（実績は報告する月の末日まで）、単位・数量・摘要
+  const kidsOf = i => { const out = []; if (depthOf(i) !== 1) return out; for (let j = i + 1; j < R.items.length && depthOf(j) === 2; j++) out.push(j); return out; };
+  const gantt = R.items.map((it, i) => {
+    let list = per.filter(p => p.item === i);
+    const many = list.length > 1;
+    // 期間のない見出しは、その下の小項目の最初から最後までを 1 本の棒にする
+    if (!list.length) {
+      const sub = per.filter(p => kidsOf(i).includes(p.item));
+      if (sub.length) list = [{ ps: Math.min(...sub.map(p => p.ps)), pe: Math.max(...sub.map(p => p.pe)), as: Math.min(...sub.map(p => p.as)), ae: Math.max(...sub.map(p => p.ae)) }];
+    }
+    return { name: it.name, depth: depthOf(i), note: it.note || "", unit: many ? "回" : "式", qty: many ? list.length : 1,
+             plan: list.map(p => [p.ps, p.pe]), act: list.filter(p => p.as <= cur.last).map(p => [p.as, Math.min(p.ae, cur.last)]) };
+  });
+  const changed = R.pers.some(p => p.hasChg);
+  const kS = dayOf(rp.kStart) ?? S, kE = dayOf(rp.kEnd) ?? E;
+  return { R, months, k, cur, S, E, kS, kE, date: dayOf(rp.date) ?? cur.last, doneAuto, nextAuto, items, gantt, changed };
 }
 
 // 折れ線グラフ（画面の確認用。Excel では Excel のグラフにする）
@@ -4095,17 +4122,20 @@ const REP_FIELDS = [
   ["form", "様式", "select"],
   ["month", "報告する月", "select"],
   ["date", "報告日", "date", "空なら、報告する月の末日"],
+  ["kStart", "工期（始め）", "date", "空なら、工程表の最初の日"],
+  ["kEnd", "工期（終わり）", "date", "空なら、工程表の最後の日"],
   ["done", "今月の実施内容", "textarea", "空なら、工程表からこの文章を入れます"],
   ["next", "来月の予定", "textarea", "空なら、工程表からこの文章を入れます"],
-  ["remarks", "備考", "textarea", ""],
+  ["remarks", "備考（記事欄）", "textarea", ""],
 ];
+const REP_ONLY = ["done", "next"];   // 履行報告書だけで使う欄（業務履行報告書は月ごとの備考を使う）
 function buildRepFields() {
   $("repFields").innerHTML = REP_FIELDS.map(([k, label, type, note]) => {
     const ctl = k === "form" ? `<select id="r_form" data-r="form"><option value="rep">履行報告書</option><option value="gyomu">業務履行報告書（作業項目ごとの進捗も付ける）</option></select>`
       : type === "select" ? `<select id="r_${k}" data-r="${k}"></select>`
       : type === "textarea" ? `<textarea id="r_${k}" data-r="${k}" rows="4"></textarea>`
       : `<input id="r_${k}" type="${type}" data-r="${k}">`;
-    return `<label for="r_${k}">${label}</label>${ctl}${note ? `<span class="note">${esc(note)}</span>` : ""}`;
+    return `<label for="r_${k}" id="rl_${k}">${label}</label>${ctl}${note ? `<span class="note" id="rn_${k}">${esc(note)}</span>` : ""}`;
   }).join("");
 }
 let repModel = null;
@@ -4125,13 +4155,15 @@ function renderReport(full = true) {
     $("repRows").innerHTML = RM.months.map((x, i) => `<tr data-key="${x.key}" class="${i === RM.k ? "cur" : i > RM.k ? "after" : ""}">`
       + `<td>${x.label}</td><td>${pct1(x.plan)}%</td>`
       + `<td><input type="text" inputmode="decimal" data-act="${x.key}" value="${esc(rp.actual[x.key] || "")}" placeholder="${i > RM.k ? "" : pct1(x.auto)}" aria-label="${x.label}の実績（%）"${i > RM.k ? " disabled" : ""}> %</td>`
-      + `<td class="d"></td></tr>`).join("");
+      + `<td class="d"></td><td class="mn"><input type="text" data-mnote="${x.key}" value="${esc(rp.mnote[x.key] || "")}" placeholder="${esc(x.noteAuto)}" aria-label="${x.label}の備考"></td></tr>`).join("");
     REP_TEXT.filter(k => k !== "month" && k !== "form").forEach(k => { const el = $(`r_${k}`); if (el && document.activeElement !== el) el.value = rp[k]; });
     $("r_form").value = rp.form === "gyomu" ? "gyomu" : "rep";
   }
-  // 業務履行報告書：作業項目ごとの進捗
+  // 業務履行報告書：作業項目ごとの進捗、月ごとの備考。履行報告書だけの欄は隠す
   const gyomu = rp.form === "gyomu";
   $("repItemsSec").hidden = !gyomu;
+  document.querySelectorAll("table.reptbl .mn").forEach(el => { el.hidden = !gyomu; });
+  REP_ONLY.forEach(k => ["r_", "rl_", "rn_"].forEach(pre => { const el = $(pre + k); if (el) el.hidden = gyomu; }));
   if (gyomu) $("repItems").innerHTML = RM.items.map(it => `<tr class="${it.depth === 2 ? "sub" : "top"}"><td>${esc(it.name)}</td><td>${esc(it.period)}</td><td>${esc(it.change)}</td>`
     + `<td>${pct1(it.plan)}%</td><td>${pct1(it.act)}%</td><td class="${/遅れ/.test(it.state) ? "minus" : ""}">${esc(it.state)}</td></tr>`).join("")
     || `<tr><td colspan="6" class="hint">日付の入った作業がありません。</td></tr>`;
@@ -4157,6 +4189,8 @@ $("repFields").addEventListener("input", e => {
 });
 $("repFields").addEventListener("change", () => commit());
 $("repRows").addEventListener("input", e => {
+  const mk = e.target.dataset.mnote;
+  if (mk) { if (clean(e.target.value)) sched.report.mnote[mk] = e.target.value; else delete sched.report.mnote[mk]; savePlan(); return; }
   const k = e.target.dataset.act;
   if (!k) return;
   if (clean(e.target.value)) sched.report.actual[k] = e.target.value; else delete sched.report.actual[k];
@@ -4192,7 +4226,7 @@ function reportXlsxParts(RM, sc) {
   const c = RM.cur;
   const info = [
     ["業務名", H.project || ""],
-    ["履行期間", `${jpDate(RM.S)}　～　${jpDate(RM.E)}`],
+    ["履行期間", `${jpDate(RM.kS)}　～　${jpDate(RM.kE)}`],
     ["報告対象", `${c.label}分（${jpDate(c.last)}現在）`],
     ["進捗率", `計画 ${pct1(c.plan)}%　　実績 ${pct1(c.act)}%　　（差 ${c.act - c.plan >= 0 ? "+" : ""}${pct1(c.act - c.plan)}%）`],
   ];
@@ -4349,10 +4383,274 @@ function reportXlsxParts(RM, sc) {
     "xl/charts/chart1.xml": chart,
   };
 }
+// ---------- 業務履行報告書の Excel（1 枚目：報告書、2 枚目：業務工程表と作業進捗率のグラフ） ----------
+// シートの中身（セル・結合・行の高さ・列の幅・線の図形・グラフ）から .xlsx の部品を作る
+function xlsxBook(sheets) {
+  const fonts = ['<font><sz val="11"/><name val="Calibri"/><family val="2"/></font>'], fontIx = {};
+  const fontId = (sz, b, color) => {
+    const key = `${sz}|${b ? 1 : 0}|${color || ""}`;
+    if (!(key in fontIx)) { fontIx[key] = fonts.length; fonts.push(`<font>${b ? "<b/>" : ""}<sz val="${sz}"/>${color ? `<color rgb="FF${color}"/>` : ""}${XL_FONT}</font>`); }
+    return fontIx[key];
+  };
+  const borders = ["<border><left/><right/><top/><bottom/><diagonal/></border>"], borderIx = { "": 0 };
+  const side = (tag, v) => (v ? `<${tag} style="${v}"><color indexed="64"/></${tag}>` : `<${tag}/>`);
+  const borderId = b => {
+    if (!b) return 0;
+    const key = [b.l, b.r, b.t, b.b].join("|");
+    if (!(key in borderIx)) { borderIx[key] = borders.length; borders.push(`<border>${side("left", b.l)}${side("right", b.r)}${side("top", b.t)}${side("bottom", b.b)}<diagonal/></border>`); }
+    return borderIx[key];
+  };
+  const xfs = ['<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>'], xfIx = {};
+  const FMT = { d: 164 };
+  const xfId = cl => {
+    const fmt = FMT[cl.t] || 0, fid = fontId(cl.sz || 10.5, cl.b, cl.color), bid = borderId(cl.bd);
+    const al = [cl.ha && `horizontal="${cl.ha}"`, `vertical="${cl.va || "center"}"`, cl.wrap && 'wrapText="1"', cl.shrink && 'shrinkToFit="1"', cl.indent && `indent="${cl.indent}"`].filter(Boolean).join(" ");
+    const key = `${fmt}|${fid}|${bid}|${al}`;
+    if (!(key in xfIx)) { xfIx[key] = xfs.length; xfs.push(`<xf numFmtId="${fmt}" fontId="${fid}" fillId="0" borderId="${bid}" xfId="0"${fmt ? ' applyNumberFormat="1"' : ""} applyFont="1"${bid ? ' applyBorder="1"' : ""} applyAlignment="1"><alignment ${al}/></xf>`); }
+    return xfIx[key];
+  };
+  const X = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n';
+  const NS = 'xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"';
+  const REL = "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
+  const parts = {}, types = [], defs = [];
+  let chartNo = 0;
+  sheets.forEach((sh, si) => {
+    const n = si + 1, covered = new Set();
+    sh.merges.forEach(([r1, c1, r2, c2]) => { for (let y = r1; y <= r2; y++) for (let x = c1; x <= c2; x++) if (y !== r1 || x !== c1) covered.add(`${y},${x}`); });
+    const byRow = [];
+    for (const cl of sh.cells.values()) (byRow[cl.r] = byRow[cl.r] || []).push(cl);
+    const rows = [];
+    for (let y = 1; y <= sh.lastRow; y++) {
+      const xs = (byRow[y] || []).sort((a, b) => a.c - b.c).map(cl => {
+        const ref = `${colName(cl.c)}${y}`, st = xfId(cl);
+        if (covered.has(`${y},${cl.c}`) || cl.v == null || cl.v === "") return `<c r="${ref}" s="${st}"/>`;
+        if (cl.t === "d") return `<c r="${ref}" s="${st}"><v>${cl.v + 25569}</v></c>`;
+        if (typeof cl.v === "number") return `<c r="${ref}" s="${st}"><v>${Math.round(cl.v * 100000) / 100000}</v></c>`;
+        return `<c r="${ref}" s="${st}" t="inlineStr"><is><t xml:space="preserve">${xesc(cl.v)}</t></is></c>`;
+      });
+      rows.push(`<row r="${y}" ht="${sh.rowH[y] || 18}" customHeight="1">${xs.join("")}</row>`);
+    }
+    const cols = sh.cols.map((w, j) => `<col min="${j + 1}" max="${j + 1}" width="${colWidth(w).w}" customWidth="1"/>`).join("");
+    const merges = sh.merges.map(m => `<mergeCell ref="${colName(m[1])}${m[0]}:${colName(m[3])}${m[2]}"/>`).join("");
+    const m = 1.8 / 2.54;
+    // 図形（線）とグラフ：セル＋セル内のずれで位置を決める（横は px、縦は pt）
+    const colX = [0, 0], rowY = [0, 0];
+    for (let c = 1; c <= sh.cols.length + 1; c++) colX[c + 1] = colX[c] + colWidth(sh.cols[c - 1] || 9).px;
+    for (let r = 1; r <= sh.lastRow + 40; r++) rowY[r + 1] = rowY[r] + (sh.rowH[r] || 18);
+    const anchorOf = (xpx, ypt) => {
+      let c = 1; while (c < sh.cols.length && colX[c + 1] <= xpx) c++;
+      let r = 1; while (r < sh.lastRow + 40 && rowY[r + 1] <= ypt) r++;
+      return `<xdr:col>${c - 1}</xdr:col><xdr:colOff>${Math.round((xpx - colX[c]) * 9525)}</xdr:colOff><xdr:row>${r - 1}</xdr:row><xdr:rowOff>${Math.round((ypt - rowY[r]) * 12700)}</xdr:rowOff>`;
+    };
+    sh.colX = colX; sh.rowY = rowY;
+    const anchors = (sh.lines || []).map((ln, i) => {
+      const x1 = Math.min(ln.x1, ln.x2), x2 = Math.max(ln.x1, ln.x2), y1 = Math.min(ln.y1, ln.y2), y2 = Math.max(ln.y1, ln.y2);
+      return `<xdr:twoCellAnchor><xdr:from>${anchorOf(x1, y1)}</xdr:from><xdr:to>${anchorOf(x2, y2)}</xdr:to>`
+        + `<xdr:cxnSp macro=""><xdr:nvCxnSpPr><xdr:cNvPr id="${i + 2}" name="${ln.name || "線"} ${i + 1}"/><xdr:cNvCxnSpPr/></xdr:nvCxnSpPr><xdr:spPr>`
+        + `<a:xfrm><a:off x="${Math.round(x1 * 9525)}" y="${Math.round(y1 * 12700)}"/><a:ext cx="${Math.round((x2 - x1) * 9525)}" cy="${Math.round((y2 - y1) * 12700)}"/></a:xfrm>`
+        + `<a:prstGeom prst="line"><a:avLst/></a:prstGeom><a:ln w="${Math.round((ln.w || 1) * 12700)}"><a:solidFill><a:srgbClr val="${ln.color || "000000"}"/></a:solidFill></a:ln></xdr:spPr></xdr:cxnSp><xdr:clientData/></xdr:twoCellAnchor>`;
+    });
+    const rels = [];
+    if (sh.chart) {
+      const cn = ++chartNo, g = sh.chart;
+      anchors.push(`<xdr:twoCellAnchor editAs="oneCell"><xdr:from><xdr:col>${g.c1 - 1}</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>${g.r1 - 1}</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:from><xdr:to><xdr:col>${g.c2}</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>${g.r2}</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:to>`
+        + `<xdr:graphicFrame macro=""><xdr:nvGraphicFramePr><xdr:cNvPr id="${anchors.length + 2}" name="${xesc(g.name)}"/><xdr:cNvGraphicFramePr/></xdr:nvGraphicFramePr><xdr:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/></xdr:xfrm>`
+        + `<a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/chart"><c:chart r:id="rId1"/></a:graphicData></a:graphic></xdr:graphicFrame><xdr:clientData/></xdr:twoCellAnchor>`);
+      parts[`xl/charts/chart${cn}.xml`] = g.xml;
+      parts[`xl/drawings/_rels/drawing${n}.xml.rels`] = `${X}<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="${REL}/chart" Target="../charts/chart${cn}.xml"/></Relationships>`;
+      types.push(`<Override PartName="/xl/charts/chart${cn}.xml" ContentType="application/vnd.openxmlformats-officedocument.drawingml.chart+xml"/>`);
+    }
+    if (anchors.length) {
+      parts[`xl/drawings/drawing${n}.xml`] = `${X}<xdr:wsDr xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="${REL}" xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart">${anchors.join("")}</xdr:wsDr>`;
+      parts[`xl/worksheets/_rels/sheet${n}.xml.rels`] = `${X}<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="${REL}/drawing" Target="../drawings/drawing${n}.xml"/></Relationships>`;
+      types.push(`<Override PartName="/xl/drawings/drawing${n}.xml" ContentType="application/vnd.openxmlformats-officedocument.drawing+xml"/>`);
+      rels.push('<drawing r:id="rId1"/>');
+    }
+    const brk = sh.breaks && sh.breaks.length ? `<rowBreaks count="${sh.breaks.length}" manualBreakCount="${sh.breaks.length}">${sh.breaks.map(b => `<brk id="${b}" max="16383" man="1"/>`).join("")}</rowBreaks>` : "";
+    parts[`xl/worksheets/sheet${n}.xml`] = `${X}<worksheet ${NS}><sheetPr><pageSetUpPr fitToPage="1"/></sheetPr><dimension ref="A1:${colName(sh.cols.length)}${sh.lastRow}"/><sheetViews><sheetView showGridLines="0"${si ? "" : ' tabSelected="1"'} workbookViewId="0"/></sheetViews><sheetFormatPr defaultRowHeight="18" customHeight="1"/><cols>${cols}</cols><sheetData>${rows.join("")}</sheetData>${merges ? `<mergeCells count="${sh.merges.length}">${merges}</mergeCells>` : ""}<printOptions horizontalCentered="1"/><pageMargins left="${m}" right="${m}" top="${m}" bottom="${m}" header="0.3" footer="0.3"/><pageSetup paperSize="9" orientation="${sh.landscape ? "landscape" : "portrait"}" fitToWidth="1" fitToHeight="0"/>${brk}${rels.join("")}</worksheet>`;
+    types.push(`<Override PartName="/xl/worksheets/sheet${n}.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>`);
+    defs.push(`<definedName name="_xlnm.Print_Area" localSheetId="${si}">'${xesc(sh.name).replace(/'/g, "''")}'!$A$1:$${colName(sh.printCols || sh.cols.length)}$${sh.lastRow}</definedName>`);
+  });
+  parts["xl/styles.xml"] = `${X}<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">`
+    + '<numFmts count="1"><numFmt numFmtId="164" formatCode="[$-411]ggge&quot;年&quot;m&quot;月&quot;d&quot;日&quot;"/></numFmts>'
+    + `<fonts count="${fonts.length}">${fonts.join("")}</fonts>`
+    + '<fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills>'
+    + `<borders count="${borders.length}">${borders.join("")}</borders>`
+    + '<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>'
+    + `<cellXfs count="${xfs.length}">${xfs.join("")}</cellXfs>`
+    + '<cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>';
+  parts["[Content_Types].xml"] = `${X}<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>${types.join("")}</Types>`;
+  parts["_rels/.rels"] = `${X}<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="${REL}/officeDocument" Target="xl/workbook.xml"/></Relationships>`;
+  parts["xl/workbook.xml"] = `${X}<workbook ${NS}><bookViews><workbookView/></bookViews><sheets>${sheets.map((sh, i) => `<sheet name="${xesc(sh.name)}" sheetId="${i + 1}" r:id="rId${i + 1}"/>`).join("")}</sheets><definedNames>${defs.join("")}</definedNames></workbook>`;
+  parts["xl/_rels/workbook.xml.rels"] = `${X}<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">${sheets.map((sh, i) => `<Relationship Id="rId${i + 1}" Type="${REL}/worksheet" Target="worksheets/sheet${i + 1}.xml"/>`).join("")}<Relationship Id="rId${sheets.length + 1}" Type="${REL}/styles" Target="styles.xml"/></Relationships>`;
+  return parts;
+}
+// シートを組み立てる道具
+function sheetMaker(name, cols) {
+  const sh = { name, cols, cells: new Map(), merges: [], rowH: {}, lastRow: 1, lines: [] };
+  const at = (r, c) => { const key = `${r},${c}`; if (!sh.cells.has(key)) sh.cells.set(key, { r, c }); sh.lastRow = Math.max(sh.lastRow, r); return sh.cells.get(key); };
+  const T = "thin";
+  return {
+    sh,
+    put: (r, c, v, st = {}) => Object.assign(at(r, c), { v }, st),
+    merge: (r1, c1, r2, c2) => { if (r1 !== r2 || c1 !== c2) sh.merges.push([r1, c1, r2, c2]); at(r2, c2); },
+    // 罫線：囲みの外側と、中の区切り（行・列ごと）
+    grid: (r1, c1, r2, c2, inner = true) => {
+      for (let r = r1; r <= r2; r++) for (let c = c1; c <= c2; c++) {
+        const cl = at(r, c), bd = cl.bd || {};
+        if (c === c1 || inner) bd.l = T; if (c === c2 || inner) bd.r = T; if (r === r1 || inner) bd.t = T; if (r === r2 || inner) bd.b = T;
+        cl.bd = bd;
+      }
+    },
+    box: (r1, c1, r2, c2) => {
+      for (let r = r1; r <= r2; r++) for (let c = c1; c <= c2; c++) {
+        const cl = at(r, c), bd = cl.bd || {};
+        if (c === c1) bd.l = T; if (c === c2) bd.r = T; if (r === r1) bd.t = T; if (r === r2) bd.b = T;
+        cl.bd = bd;
+      }
+    },
+  };
+}
+const shortMonth = x => `R${eraOf(x.first)[1]}.${x.m}`;
+const pctInt = v => Math.round(v * 100);
+function gyomuXlsxParts(RM, sc) {
+  const H = sc.head, rp = sc.report, months = RM.months, k = RM.k, cur = RM.cur;
+  // ---- 1 枚目：業務履行報告書（A4 縦）
+  const A = sheetMaker("業務履行報告書", [14, 17, 13, 8, 8, 8, 8, 2, 8, 8]);
+  const L1 = 10;
+  let r = 2;
+  A.put(r, 1, "業　務　履　行　報　告　書", { sz: 16, ha: "center" }); A.merge(r, 1, r, L1); A.sh.rowH[r] = 36;
+  r = 4;
+  const info = [["業務名", H.project || ""], ["工期", `${jpDate(RM.kS)}　～　${jpDate(RM.kE)}`], ["日付", `${jpDate(RM.date)}（${cur.m}月分）`]];
+  for (const [a, b] of info) {
+    A.put(r, 1, a, { ha: "center" }); A.put(r, 2, b, { indent: 1, shrink: true }); A.merge(r, 2, r, L1); A.grid(r, 1, r, L1, false); A.box(r, 1, r, 1);
+    A.sh.rowH[r] = 30; r++;
+  }
+  A.put(r, 1, "月　　別", { ha: "center" });
+  A.put(r, 2, "予定工程　%\n（　）は工程変更後", { ha: "center", wrap: true, sz: 10 });
+  A.put(r, 3, "実施工程　%", { ha: "center" });
+  A.put(r, 4, "備　　考", { ha: "center" }); A.merge(r, 4, r, L1);
+  A.grid(r, 1, r, 3); A.box(r, 4, r, L1); A.sh.rowH[r] = 36; r++;
+  months.forEach((x, i) => {
+    const label = i === 0 || x.m === 1 ? `令和${eraOf(x.first)[1]}年 ${x.m}月` : `${x.m}月`;
+    A.put(r, 1, label, { ha: "right", indent: 1 });
+    const pl = pctInt(x.plan), ch = pctInt(x.auto);
+    A.put(r, 2, RM.changed && ch !== pl ? `${pl}（${ch}）` : pl, { ha: "center" });
+    if (x.act != null) A.put(r, 3, pctInt(x.act), { ha: "center" });
+    const note = i <= k ? (clean(rp.mnote[x.key] || "") ? rp.mnote[x.key] : x.noteAuto) : "";
+    A.put(r, 4, note, { va: "top", wrap: true, indent: 1 }); A.merge(r, 4, r, L1);
+    A.grid(r, 1, r, 3); A.box(r, 4, r, L1);
+    A.sh.rowH[r] = note.length > 26 ? 36 : 26; r++;
+  });
+  const memo = `（記事欄）${clean(rp.remarks) ? "\n" + String(rp.remarks).replace(/\r\n?/g, "\n").replace(/\s+$/, "") : ""}`;
+  A.put(r, 1, memo, { va: "top", wrap: true }); A.merge(r, 1, r, L1); A.box(r, 1, r, L1);
+  A.sh.rowH[r] = Math.max(90, memo.split("\n").length * 16 + 20); r += 2;
+  // 確認の欄（総括調査員・主任調査員・調査員・調査員／管理技術者）
+  [["総　括\n調査員", 4], ["主　任\n調査員", 5], ["調査員", 6], ["調査員", 7], ["管理技術\n者", 9]].forEach(([t, c]) => A.put(r, c, t, { ha: "center", wrap: true, sz: 9 }));
+  A.grid(r, 4, r + 1, 7); A.grid(r, 9, r + 1, 10);
+  A.sh.rowH[r] = 30; A.sh.rowH[r + 1] = 44;
+
+  // ---- 2 枚目：履行期間・業務工程表（計画＝黒、実績＝赤）・作業進捗率のグラフ
+  const n = months.length, SUB = 3, C0 = 4, cEnd = C0 + n * SUB, cNote = cEnd;   // 月ごとに上旬・中旬・下旬の 3 列
+  const cols2 = [22, 4, 4];
+  for (let i = 0; i < n * SUB; i++) cols2.push(Math.max(1.6, Math.min(3.2, 66 / (n * SUB))));
+  cols2.push(12, 2, 8, 8, 8);   // 摘要、すき間、グラフの元の数字（年月・計画・実績）
+  const B = sheetMaker("工程・進捗率", cols2);
+  B.sh.printCols = cNote;
+  r = 2;
+  B.put(r, 1, `履行期間：${jpDate(RM.kS)}　～　${jpDate(RM.kE)}`, { sz: 12 }); B.merge(r, 1, r, cNote); B.sh.rowH[r] = 24;
+  r = 4;
+  const h1 = r, h2 = r + 1;
+  B.put(h1, 1, "項　　　　目", { ha: "center", sz: 9 }); B.merge(h1, 1, h2, 1);
+  B.put(h1, 2, "単位", { ha: "center", sz: 8 }); B.merge(h1, 2, h2, 2);
+  B.put(h1, 3, "数量", { ha: "center", sz: 8 }); B.merge(h1, 3, h2, 3);
+  months.forEach((x, i) => {
+    const c = C0 + i * SUB;
+    B.put(h1, c, `${x.m}月`, { ha: "center", sz: 8, shrink: true }); B.merge(h1, c, h1, c + SUB - 1);
+    ["上", "中", "下"].forEach((t, j) => B.put(h2, c + j, t, { ha: "center", sz: 6 }));
+  });
+  B.put(h1, cNote, "摘　　要", { ha: "center", sz: 9 }); B.merge(h1, cNote, h2, cNote);
+  B.grid(h1, 1, h2, cNote); B.sh.rowH[h1] = 16; B.sh.rowH[h2] = 12;
+  r = h2 + 1;
+  const first = r;
+  RM.gantt.forEach(g => {
+    B.put(r, 1, g.depth === 2 ? `　${g.name}` : g.name, { sz: 8, wrap: true });
+    B.put(r, 2, g.unit, { ha: "center", sz: 8 }); B.put(r, 3, g.qty, { ha: "center", sz: 8 });
+    B.put(r, cNote, g.note, { sz: 7, wrap: true });
+    B.sh.rowH[r] = 22; r++;
+  });
+  const lastG = r - 1;
+  B.grid(first, 1, lastG, cNote);
+  // 凡例
+  r++;
+  B.put(r, cNote - 6, "―：計画", { ha: "right", sz: 10 }); B.merge(r, cNote - 6, r, cNote); r++;
+  B.put(r, cNote - 6, "―：実績", { ha: "right", sz: 10, color: "FF0000" }); B.merge(r, cNote - 6, r, cNote); r += 2;
+  // グラフの位置（15 行）
+  const chartTop = r, chartRows = 16;
+  B.sh.lastRow = Math.max(B.sh.lastRow, chartTop + chartRows);
+  // 縦の位置（pt）と横の位置（px）を出してから、棒を引く
+  const colPx = [0, 0];
+  for (let c = 1; c <= cols2.length; c++) colPx[c + 1] = colPx[c] + colWidth(cols2[c - 1]).px;
+  const rowPt = [0, 0];
+  for (let y = 1; y <= B.sh.lastRow + 2; y++) rowPt[y + 1] = rowPt[y] + (B.sh.rowH[y] || 18);
+  const xOf = (d, end) => {
+    const [yy, mm, dd] = ymdOf(d), i = months.findIndex(x => x.y === yy && x.m === mm);
+    if (i < 0) return d < months[0].first ? colPx[C0] : colPx[cEnd];
+    const dim = ymdOf(months[i].last)[2], sub = dd <= 10 ? 0 : dd <= 20 ? 1 : 2, s0 = [1, 11, 21][sub], len = sub < 2 ? 10 : dim - 20;
+    const c = C0 + i * SUB + sub, w = colPx[c + 1] - colPx[c];
+    return colPx[c] + w * Math.min(1, (dd - s0 + (end ? 1 : 0)) / len);
+  };
+  RM.gantt.forEach((g, gi) => {
+    const y0 = rowPt[first + gi], h = rowPt[first + gi + 1] - y0;
+    g.plan.forEach(([s, e]) => B.sh.lines.push({ name: "計画", x1: xOf(s, false), y1: y0 + h * 0.4, x2: Math.max(xOf(e, true), xOf(s, false) + 2), y2: y0 + h * 0.4, color: "000000", w: 1.5 }));
+    g.act.forEach(([s, e]) => B.sh.lines.push({ name: "実績", x1: xOf(s, false), y1: y0 + h * 0.62, x2: Math.max(xOf(e, true), xOf(s, false) + 2), y2: y0 + h * 0.62, color: "FF0000", w: 1.5 }));
+  });
+  // グラフの元の数字（印刷しない列）。最初は 0 から始める
+  const cY = cNote + 2, cP = cY + 1, cA = cY + 2;
+  B.put(h1, cY, "年月", { ha: "center", sz: 9 }); B.put(h1, cP, "計画", { ha: "center", sz: 9 }); B.put(h1, cA, "実績", { ha: "center", sz: 9 });
+  const d0 = h1 + 1;
+  B.put(d0, cY, "", {}); B.put(d0, cP, 0, { ha: "center", sz: 9 }); B.put(d0, cA, 0, { ha: "center", sz: 9 });
+  months.forEach((x, i) => {
+    B.put(d0 + 1 + i, cY, shortMonth(x), { ha: "center", sz: 9 });
+    B.put(d0 + 1 + i, cP, pctInt(x.plan), { ha: "center", sz: 9 });
+    if (x.act != null) B.put(d0 + 1 + i, cA, pctInt(x.act), { ha: "center", sz: 9 });
+  });
+  const dN = d0 + n, q = `'工程・進捗率'`, ref = c => `${q}!$${colName(c)}$${d0}:$${colName(c)}$${dN}`;
+  const catPts = [""].concat(months.map(shortMonth));
+  const cats = `<c:cat><c:strRef><c:f>${ref(cY)}</c:f><c:strCache><c:ptCount val="${n + 1}"/>${catPts.map((t, i) => `<c:pt idx="${i}"><c:v>${xesc(t)}</c:v></c:pt>`).join("")}</c:strCache></c:strRef></c:cat>`;
+  const cache = vals => `<c:numCache><c:formatCode>General</c:formatCode><c:ptCount val="${n + 1}"/>${vals.map((v, i) => (v == null ? "" : `<c:pt idx="${i}"><c:v>${v}</c:v></c:pt>`)).join("")}</c:numCache>`;
+  const font = (sz, b) => `<c:txPr><a:bodyPr/><a:lstStyle/><a:p><a:pPr><a:defRPr sz="${sz}"${b ? ' b="1"' : ""}><a:latin typeface="ＭＳ Ｐゴシック"/><a:ea typeface="ＭＳ Ｐゴシック"/></a:defRPr></a:pPr><a:endParaRPr lang="ja-JP"/></a:p></c:txPr>`;
+  const ser = (i, name, col, color, dash, vals) => `<c:ser><c:idx val="${i}"/><c:order val="${i}"/><c:tx><c:strRef><c:f>${q}!$${colName(col)}$${h1}</c:f><c:strCache><c:ptCount val="1"/><c:pt idx="0"><c:v>${name}</c:v></c:pt></c:strCache></c:strRef></c:tx>`
+    + `<c:spPr><a:ln w="28575" cap="rnd"><a:solidFill><a:srgbClr val="${color}"/></a:solidFill>${dash ? `<a:prstDash val="${dash}"/>` : ""}<a:round/></a:ln></c:spPr>`
+    + `<c:marker><c:symbol val="circle"/><c:size val="7"/><c:spPr><a:solidFill><a:srgbClr val="${color}"/></a:solidFill><a:ln w="9525"><a:solidFill><a:srgbClr val="${color}"/></a:solidFill></a:ln></c:spPr></c:marker>`
+    + `${cats}<c:val><c:numRef><c:f>${ref(col)}</c:f>${cache(vals)}</c:numRef></c:val><c:smooth val="0"/></c:ser>`;
+  const grid = '<c:majorGridlines><c:spPr><a:ln w="9525"><a:solidFill><a:srgbClr val="D9D9D9"/></a:solidFill></a:ln></c:spPr></c:majorGridlines>';
+  const noLine = '<c:spPr><a:ln><a:noFill/></a:ln></c:spPr>';
+  const chartXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">`
+    + `<c:lang val="ja-JP"/><c:roundedCorners val="0"/><c:chart>`
+    + `<c:title><c:tx><c:rich><a:bodyPr/><a:lstStyle/><a:p><a:pPr><a:defRPr sz="1400" b="1"/></a:pPr><a:r><a:rPr lang="ja-JP" sz="1400" b="1"><a:latin typeface="ＭＳ Ｐゴシック"/><a:ea typeface="ＭＳ Ｐゴシック"/></a:rPr><a:t>作業進捗率</a:t></a:r></a:p></c:rich></c:tx><c:overlay val="0"/></c:title>`
+    + `<c:autoTitleDeleted val="0"/><c:plotArea><c:layout/><c:lineChart><c:grouping val="standard"/><c:varyColors val="0"/>`
+    + ser(0, "計画", cP, "000000", "dashDot", [0].concat(months.map(x => pctInt(x.plan))))
+    + ser(1, "実績", cA, "FF0000", "", [0].concat(months.map(x => (x.act == null ? null : pctInt(x.act)))))
+    + `<c:marker val="1"/><c:axId val="50020001"/><c:axId val="50020002"/></c:lineChart>`
+    + `<c:catAx><c:axId val="50020001"/><c:scaling><c:orientation val="minMax"/></c:scaling><c:delete val="0"/><c:axPos val="b"/>${grid}<c:numFmt formatCode="General" sourceLinked="0"/><c:majorTickMark val="none"/><c:minorTickMark val="none"/><c:tickLblPos val="nextTo"/>${noLine}${font(1000)}<c:crossAx val="50020002"/><c:crosses val="autoZero"/><c:auto val="1"/><c:lblAlgn val="ctr"/><c:lblOffset val="100"/><c:noMultiLvlLbl val="0"/></c:catAx>`
+    + `<c:valAx><c:axId val="50020002"/><c:scaling><c:orientation val="minMax"/><c:max val="100"/><c:min val="0"/></c:scaling><c:delete val="0"/><c:axPos val="l"/>${grid}`
+    + `<c:title><c:tx><c:rich><a:bodyPr rot="-5400000" vert="horz"/><a:lstStyle/><a:p><a:pPr><a:defRPr sz="1000" b="1"/></a:pPr><a:r><a:rPr lang="ja-JP" sz="1000" b="1"><a:latin typeface="ＭＳ Ｐゴシック"/><a:ea typeface="ＭＳ Ｐゴシック"/></a:rPr><a:t>進捗率（%）</a:t></a:r></a:p></c:rich></c:tx><c:overlay val="0"/></c:title>`
+    + `<c:numFmt formatCode="General" sourceLinked="0"/><c:majorTickMark val="none"/><c:minorTickMark val="none"/><c:tickLblPos val="nextTo"/>${noLine}${font(1000)}<c:crossAx val="50020001"/><c:crosses val="autoZero"/><c:crossBetween val="midCat"/><c:majorUnit val="10"/></c:valAx>`
+    + `</c:plotArea><c:legend><c:legendPos val="b"/><c:overlay val="0"/>${font(1000)}</c:legend><c:plotVisOnly val="1"/><c:dispBlanksAs val="gap"/></c:chart>`
+    + `<c:spPr><a:solidFill><a:srgbClr val="FFFFFF"/></a:solidFill><a:ln w="9525"><a:solidFill><a:srgbClr val="D9D9D9"/></a:solidFill></a:ln></c:spPr>${font(1000)}</c:chartSpace>`;
+  B.sh.chart = { name: "作業進捗率", c1: 1, r1: chartTop, c2: cNote, r2: chartTop + chartRows - 1, xml: chartXml };
+  // 工程表の行が多くてグラフが 1 ページに入らないときは、グラフの前で改ページ
+  const PAGE = 841.9 - 2 * (1.8 / 2.54 * 72) - 6;
+  if (rowPt[chartTop] + chartRows * 18 > PAGE) B.sh.breaks = [chartTop - 1];
+  return xlsxBook([A.sh, B.sh]);
+}
+
 async function saveReport() {
   const RM = reportModel(sched);
   if (!RM.months.length) { toast("工程表に、日付の入った作業がありません。"); return; }
-  const blob = new Blob([zipBytes(reportXlsxParts(RM, sched))], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+  const parts = rp_form(sched) === "gyomu" ? gyomuXlsxParts(RM, sched) : reportXlsxParts(RM, sched);
+  const blob = new Blob([zipBytes(parts)], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
   const t = clean(sched.head.project || "");
   const name = (`${rp_form(sched) === "gyomu" ? "業務履行報告書" : "履行報告書"}_${RM.cur.label}${t ? `_${t}` : ""}`).replace(/[\\/:*?"<>|]/g, "_").slice(0, 70);
   try {
