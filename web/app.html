@@ -411,7 +411,7 @@ table.reptbl.items tr.top td:first-child { font-weight: 700; }
     </div>
     <section class="sheet" id="repItemsSec" aria-labelledby="hRepItems" hidden>
       <div class="sheet-head"><h2 id="hRepItems">作業項目ごとの進捗（業務履行報告書）</h2></div>
-      <p class="hint">「報告する月」の月末時点の進捗です（月を選ばないときは今日の月。工程表の期間が終わっていれば最後の月なので、すべて 100% になります）。各作業の期間のうち、経過した日数の割合で計算します（計画は当初の日付、実績は変更後の日付）。日付のない見出しは、その下の小項目をまとめた値です。</p>
+      <p class="hint">「報告する月」の月末時点の進捗です（月を選ばないときは前の月。工程表の期間が終わっていれば最後の月なので、すべて 100% になります）。各作業の期間のうち、経過した日数の割合で計算します（計画は当初の日付、実績は変更後の日付）。日付のない見出しは、その下の小項目をまとめた値です。</p>
       <div class="rep-wrap">
         <table class="reptbl items">
           <thead><tr><th>作業項目</th><th>計画期間</th><th>変更後</th><th>計画</th><th>実績</th><th>状況</th></tr></thead>
@@ -4019,12 +4019,12 @@ function reportModel(sc) {
     months.push({ key: `${y}-${String(m).padStart(2, "0")}`, y, m, first, last, label: monthLabel(y, m),
                   plan: progress(per, last, false), auto: progress(per, last, true) });
   }
-  // 報告する月：選んだ月。なければ今日の月（期間の前なら最初、後なら最後の月）
+  // 報告する月：選んだ月。なければ前の月（報告は翌月の初めに出すため。月末が過ぎた最後の月。
+  // 期間が終わっていれば最後の月、まだ最初の月が終わっていなければ最初の月）
   let k = months.findIndex(x => x.key === rp.month);
   if (k < 0) {
     const today = Math.floor(Date.now() / DAY_MS + 0.375);   // 日本時間の今日
-    k = months.findIndex(x => today <= x.last);
-    if (k < 0) k = months.length - 1;
+    k = months.reduce((a, x, i) => (x.last < today ? i : a), 0);
   }
   months.forEach((x, i) => {
     const raw = toHalf(clean(rp.actual[x.key] || "")).replace(/[%％]$/, ""), n = Number(raw);
@@ -4123,7 +4123,7 @@ const chartLabel = (x, i) => (i === 0 || x.m === 1 ? `${eraOf(x.first)[1]}年${x
 
 const REP_FIELDS = [
   ["form", "様式", "select"],
-  ["month", "報告する月", "select"],
+  ["month", "報告する月", "select", "最初は前の月（報告は翌月の初めに作るため）"],
   ["date", "報告日", "date", "空なら、報告する月の末日"],
   ["kStart", "工期（始め）", "date", "空なら、工程表の最初の日"],
   ["kEnd", "工期（終わり）", "date", "空なら、工程表の最後の日"],
@@ -4168,7 +4168,7 @@ function renderReport(full = true) {
   $("repItemsSec").hidden = !gyomu;
   document.querySelectorAll("table.reptbl .mn").forEach(el => { el.hidden = !gyomu; });
   REP_ONLY.forEach(k => ["r_", "rl_", "rn_"].forEach(pre => { const el = $(pre + k); if (el) el.hidden = gyomu; }));
-  // 見出しに、どの月の末の進捗かを出す（報告する月を選ばないと今日の月。期間が終わっていれば最後の月で、全部 100% になる）
+  // 見出しに、どの月の末の進捗かを出す（報告する月を選ばないと前の月。期間が終わっていれば最後の月で、全部 100% になる）
   $("hRepItems").textContent = `作業項目ごとの進捗（${RM.cur.label}末現在）`;
   if (gyomu) $("repItems").innerHTML = RM.items.map(it => `<tr class="${it.depth === 2 ? "sub" : "top"}"><td>${esc(it.name)}</td><td>${esc(it.period)}</td><td>${esc(it.change)}</td>`
     + `<td>${pct1(it.plan)}%</td><td>${pct1(it.act)}%</td><td class="${/遅れ/.test(it.state) ? "minus" : ""}">${esc(it.state)}</td></tr>`).join("")
