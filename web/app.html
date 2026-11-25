@@ -207,6 +207,14 @@ table.reptbl th { color: var(--muted); font-weight: 600; }
 table.reptbl th:first-child, table.reptbl td:first-child { text-align: left; }
 table.reptbl .minus { color: var(--chg); }
 table.reptbl.items :is(td, th):is(:nth-child(2), :nth-child(3), :nth-child(6)) { text-align: left; }
+/* Excel のシートを選ぶ画面 */
+.pick-dlg { width: min(520px, calc(100vw - 32px)); max-height: calc(100vh - 64px); border: 1px solid var(--rule); border-radius: 10px; padding: 18px; background: var(--panel); color: var(--ink); }
+.pick-dlg::backdrop { background: rgba(0, 0, 0, .35); }
+.pick-dlg h2 { margin: 0 0 6px; font: 700 15px/1.4 var(--f-display); }
+.pick-list { display: grid; gap: 6px; margin: 12px 0; max-height: 50vh; overflow: auto; }
+.pick-list .btn { display: flex; justify-content: space-between; align-items: center; gap: 12px; text-align: left; width: 100%; }
+.pick-list .btn span { color: var(--muted); font-size: 12px; white-space: nowrap; }
+.pick-foot { display: flex; justify-content: flex-end; }
 /* 報告の内容：提出する様式と同じ形の表 */
 .sheet-head .pick { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); }
 table.repform { border-collapse: collapse; width: 100%; min-width: 660px; font-size: 13px; font-variant-numeric: tabular-nums; }
@@ -357,8 +365,10 @@ table.reptbl.items tr.top td:first-child { font-weight: 700; }
         <div class="actions">
           <button id="btnImport" class="btn" type="button" title="フローチャートの手順・小項目・照査・打合せを作業項目にします（入れた日付は残ります）">フローチャートの手順を取り込む</button>
           <button id="btnExport" class="btn" type="button" title="工程表の作業項目（1. は手順、1.1. は小項目）をフローチャートの手順に反映します">フローチャートに反映</button>
-          <select id="planSample" aria-label="サンプルを入れる">
-            <option value="">サンプルを入れる…</option>
+          <input id="fileXlsx" type="file" accept=".xlsx,.xlsm,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel.sheet.macroEnabled.12" hidden>
+          <select id="planSample" aria-label="サンプル・Excel を入れる">
+            <option value="">サンプル・Excel を入れる…</option>
+            <option value="excel">Excel から読み込む…</option>
             <option value="blank">白紙にする</option>
             <option value="koutei">詳細検討業務（Excel の例）</option>
           </select>
@@ -433,6 +443,12 @@ table.reptbl.items tr.top td:first-child { font-weight: 700; }
     </section>
   </main>
 </div>
+<dialog id="xlPick" class="pick-dlg" aria-labelledby="xlPickTitle">
+  <h2 id="xlPickTitle">どのシートを読み込みますか？</h2>
+  <p class="hint">作業と日付が見つかったシートです。読み込むと、工程表の作業と日程が置き換わります（「元に戻す」で戻せます）。</p>
+  <div class="pick-list" id="xlPickList"></div>
+  <div class="pick-foot"><button type="button" class="btn" id="xlPickCancel">やめる</button></div>
+</dialog>
 <div id="toast" class="toast" role="status" hidden></div>
 
 <script>
@@ -3953,6 +3969,7 @@ $("btnSyncIgnore").addEventListener("click", () => { sched.ignoreSync = flowSign
 $("planSample").addEventListener("change", e => {
   const k = e.target.value;
   e.target.value = "";
+  if (k === "excel") { $("fileXlsx").click(); return; }
   if (k === "blank") {
     // 作業項目と見出しを空にする（設定はそのまま）。白紙にしたあとは、フローチャートの手順を自動では取り込まない
     commit();
@@ -3978,6 +3995,400 @@ $("planSample").addEventListener("change", e => {
   showHolidays();
   commit();
   toast("サンプルを入れました。", "元に戻す", undo);
+});
+
+// ====================================================================
+// Excel から工程表の作業と日程を読み込む
+// ・表の形：「作業項目」の右に「開始日」「終了日」「日数」の見出しがある表（工程表自動作成ツール.xlsm の「入力」シートなど）。
+//   2 組目の開始日・終了日・日数は実績。「備考」、上にある見出し（業務名・宛先など）と設定も読む
+// ・バーの形：月の見出し（「8年3月」「６月」など）が横に並び、作業ごとに線・バーを引いた表
+//   （このツールで保存した工程表、手で作った業務工程表）。線の位置から日付を出し、線の端のそばに
+//   日にちの数字が書いてあれば、その日にそろえる。線が上下 2 段の作業は、上＝計画、下＝実績
+// ====================================================================
+const REL_NS = "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
+const xmlDoc = s => new DOMParser().parseFromString(s || "<x/>", "application/xml");
+const els = (node, name) => [...node.getElementsByTagNameNS("*", name)];
+const kids = (node, name) => [...node.children].filter(e => e.localName === name);
+const xlText = node => els(node, "t").filter(t => t.parentNode.localName !== "rPh").map(t => t.textContent).join("");   // ふりがなは除く
+const normLabel = s => String(s).replace(/[\s　]/g, "");
+const xlWidthPx = w => Math.trunc((256 * w + Math.trunc(128 / 7)) / 256 * 7);   // 列幅（文字数）→ ピクセル（colWidth と同じ）
+const ERA_BASE = { 令和: 2018, R: 2018, 平成: 1988, H: 1988 };
+
+// xlsx（ZIP）の中のファイルを読む
+async function readZip(buf) {
+  const u8 = new Uint8Array(buf), dv = new DataView(buf), files = new Map(), dec = new TextDecoder();
+  let end = -1;
+  for (let i = u8.length - 22; i >= Math.max(0, u8.length - 65557); i--) if (dv.getUint32(i, true) === 0x06054b50) { end = i; break; }
+  if (end < 0) throw new Error("zip");
+  let p = dv.getUint32(end + 16, true);
+  for (let k = dv.getUint16(end + 10, true); k > 0 && dv.getUint32(p, true) === 0x02014b50; k--) {
+    const method = dv.getUint16(p + 10, true), size = dv.getUint32(p + 20, true), nl = dv.getUint16(p + 28, true);
+    const at = dv.getUint32(p + 42, true), start = at + 30 + dv.getUint16(at + 26, true) + dv.getUint16(at + 28, true);
+    files.set(dec.decode(u8.subarray(p + 46, p + 46 + nl)), { method, data: u8.subarray(start, start + size) });
+    p += 46 + nl + dv.getUint16(p + 30, true) + dv.getUint16(p + 32, true);
+  }
+  return {
+    async text(name) {
+      const f = files.get(name);
+      if (!f) return null;
+      if (f.method === 0) return dec.decode(f.data);
+      if (f.method !== 8) throw new Error("zip method");
+      const out = await new Response(new Blob([f.data]).stream().pipeThrough(new DecompressionStream("deflate-raw"))).arrayBuffer();
+      return dec.decode(out);
+    },
+  };
+}
+const partPath = (base, t) => {
+  if (t.startsWith("/")) return t.slice(1);
+  const out = base.split("/").slice(0, -1);
+  for (const s of t.split("/")) { if (s === "..") out.pop(); else if (s && s !== ".") out.push(s); }
+  return out.join("/");
+};
+async function partRels(Z, part) {
+  const out = {}, x = await Z.text(part.replace(/([^/]+)$/, "_rels/$1.rels"));
+  if (x) for (const r of els(xmlDoc(x), "Relationship")) if (r.getAttribute("TargetMode") !== "External") out[r.getAttribute("Id")] = partPath(part, r.getAttribute("Target") || "");
+  return out;
+}
+const relId = el => el.getAttributeNS(REL_NS, "id") || el.getAttribute("r:id");
+
+// 文字の中の年月（日まであってもなくてもよい）：和暦（令和7年7月1日・R7.7）と西暦（2026/3/2）
+function findYM(str) {
+  const s = toHalf(String(str)), out = [];
+  for (const m of s.matchAll(/(令和|平成|R|H)\s*(\d{1,2}|元)\s*[年.．]\s*(\d{1,2})(?!\d)/g)) out.push([ERA_BASE[m[1]] + (m[2] === "元" ? 1 : +m[2]), +m[3]]);
+  for (const m of s.matchAll(/(\d{4})\s*[年/／.\-]\s*(\d{1,2})(?!\d)/g)) out.push([+m[1], +m[2]]);
+  return out.filter(([y, m]) => y > 1950 && y < 2200 && m >= 1 && m <= 12);
+}
+// 日付 1 つ（セルの値）：Excel の日付の数、2026-03-02、2026/3/2、令和8年3月2日
+function cellDay(v, d1904) {
+  if (typeof v === "number") return v > 20000 && v < 80000 ? Math.round(v) - 25569 + (d1904 ? 1462 : 0) : null;
+  const s = toHalf(clean(String(v)));
+  let m = /^(\d{4})\s*[年/／.\-]\s*(\d{1,2})\s*[月/／.\-]\s*(\d{1,2})/.exec(s);
+  if (m) return dayYMD(+m[1], +m[2], +m[3]);
+  m = /^(令和|平成|R|H)\s*(\d{1,2}|元)\s*[年.．]\s*(\d{1,2})\s*[月.．]\s*(\d{1,2})/.exec(s);
+  return m ? dayYMD(ERA_BASE[m[1]] + (m[2] === "元" ? 1 : +m[2]), +m[3], +m[4]) : null;
+}
+
+async function readWorkbook(buf) {
+  const Z = await readZip(buf), wb = xmlDoc(await Z.text("xl/workbook.xml"));
+  if (!els(wb, "sheet").length) throw new Error("xlsx");
+  const rels = await partRels(Z, "xl/workbook.xml"), ss = await Z.text("xl/sharedStrings.xml"), wp = els(wb, "workbookPr")[0];
+  return {
+    Z, strings: ss ? els(xmlDoc(ss), "si").map(xlText) : [],
+    d1904: !!wp && /^(1|true)$/.test(wp.getAttribute("date1904") || ""),
+    sheets: els(wb, "sheet").map(s => ({ name: s.getAttribute("name") || "", state: s.getAttribute("state") || "visible", part: rels[relId(s)] })),
+  };
+}
+// シート：セルの値、結合、位置（列の左端 px・行の上端 pt）、図形（線・四角。文字の入った図形とグラフは除く）
+async function readSheet(B, sh) {
+  const x = xmlDoc(await B.Z.text(sh.part)), cells = new Map(), merges = [], rowH = [], colW = [], texts = [];
+  const fmt = els(x, "sheetFormatPr")[0], num = (el, a) => parseFloat(el && el.getAttribute(a));
+  const defH = num(fmt, "defaultRowHeight") || 15, defW = num(fmt, "defaultColWidth") || (num(fmt, "baseColWidth") || 8) + 0.43;
+  const colNum = s => [...s].reduce((v, ch) => v * 26 + ch.charCodeAt(0) - 64, 0);
+  let maxR = 0, maxC = 0, rr = 0;
+  for (const row of els(x, "row")) {
+    rr = +row.getAttribute("r") || rr + 1;
+    if (row.getAttribute("hidden") === "1") rowH[rr] = 0; else if (row.getAttribute("ht")) rowH[rr] = +row.getAttribute("ht");
+    let cc = 0;
+    for (const c of kids(row, "c")) {
+      const ref = /^([A-Z]+)(\d+)$/.exec(c.getAttribute("r") || "");
+      cc = ref ? colNum(ref[1]) : cc + 1;
+      const t = c.getAttribute("t"), vt = kids(c, "v")[0] ? kids(c, "v")[0].textContent : "";
+      const v = t === "s" ? B.strings[+vt] : t === "inlineStr" ? (kids(c, "is")[0] ? xlText(kids(c, "is")[0]) : "") : t === "str" || t === "b" ? vt : t === "e" || vt === "" ? null : Number(vt);
+      if (v == null || v === "" || (typeof v === "number" && !isFinite(v))) continue;
+      cells.set(`${rr},${cc}`, v);
+      maxR = Math.max(maxR, rr); maxC = Math.max(maxC, cc);
+    }
+  }
+  for (const col of els(x, "col")) {
+    const w = col.getAttribute("hidden") === "1" ? 0 : xlWidthPx(num(col, "width") || defW);
+    for (let c = +col.getAttribute("min"); c <= Math.min(+col.getAttribute("max"), 2000); c++) colW[c] = w;
+  }
+  for (const m of els(x, "mergeCell")) {
+    const g = /^([A-Z]+)(\d+):([A-Z]+)(\d+)$/.exec(m.getAttribute("ref") || "");
+    if (g) merges.push([+g[2], colNum(g[1]), +g[4], colNum(g[3])]);
+  }
+  const X = [0, 0], Y = [0, 0], cw = c => colW[c] ?? xlWidthPx(defW);
+  const colX = c => { for (let k = X.length; k <= c; k++) X[k] = X[k - 1] + cw(k - 1); return X[c]; };
+  const rowY = r => { for (let k = Y.length; k <= r; k++) Y[k] = Y[k - 1] + (rowH[k - 1] ?? defH); return Y[r]; };
+  const colAt = px => { let c = 1; while (c < 2000 && colX(c + 1) <= px) c++; return c + Math.max(0, px - colX(c)) / (cw(c) || 1); };   // 列の番号（小数）
+  // 図形
+  const shapes = [], rels = await partRels(B.Z, sh.part);
+  const xf = el => { const a = el && els(el, "xfrm")[0]; if (!a) return null; const g = (n, p, q) => { const e = kids(a, n)[0]; return e ? [+e.getAttribute(p), +e.getAttribute(q)] : null; }; return { off: g("off", "x", "y"), ext: g("ext", "cx", "cy"), chOff: g("chOff", "x", "y"), chExt: g("chExt", "cx", "cy") }; };
+  const take = (el, box) => {
+    if (el.localName === "grpSp") {
+      // まとめた図形：中の図形の位置を、まとめの枠に合わせて直す
+      const g = xf(kids(el, "grpSpPr")[0]);
+      for (const k of el.children) {
+        if (!["sp", "cxnSp", "grpSp"].includes(k.localName)) continue;
+        const f = xf(kids(k, k.localName === "grpSp" ? "grpSpPr" : "spPr")[0]);
+        if (!g || !g.chOff || !g.chExt || !f || !f.off || !f.ext) { take(k, box); continue; }
+        const sx = (box.x2 - box.x1) / (g.chExt[0] || 1), sy = (box.y2 - box.y1) / (g.chExt[1] || 1);
+        const x1 = box.x1 + (f.off[0] - g.chOff[0]) * sx, y1 = box.y1 + (f.off[1] - g.chOff[1]) * sy;
+        take(k, { x1, y1, x2: x1 + f.ext[0] * sx, y2: y1 + f.ext[1] * sy });
+      }
+      return;
+    }
+    if (el.localName !== "sp" && el.localName !== "cxnSp") return;
+    const body = kids(el, "txBody")[0], word = body ? clean(xlText(body)) : "";
+    if (word) { texts.push(word); return; }
+    if (els(el, "cNvSpPr").some(e => e.getAttribute("txBox") === "1")) return;
+    const geo = els(el, "prstGeom")[0], prst = geo ? geo.getAttribute("prst") || "" : "";
+    shapes.push({ x1: Math.min(box.x1, box.x2), x2: Math.max(box.x1, box.x2), y1: Math.min(box.y1, box.y2), y2: Math.max(box.y1, box.y2), line: el.localName === "cxnSp" || /line|Connector/i.test(prst) });
+  };
+  for (const d of els(x, "drawing")) {
+    const part = rels[relId(d)];
+    if (!part) continue;
+    const dx = xmlDoc(await B.Z.text(part));
+    for (const an of [...dx.documentElement.children]) {
+      const at = el => { const g = n => +(kids(el, n)[0] ? kids(el, n)[0].textContent : 0); return [colX(g("col") + 1) + g("colOff") / 9525, rowY(g("row") + 1) + g("rowOff") / 12700]; };
+      const from = kids(an, "from")[0], to = kids(an, "to")[0], ext = kids(an, "ext")[0], pos = kids(an, "pos")[0];
+      let box = null;
+      if (from && to) { const [x1, y1] = at(from), [x2, y2] = at(to); box = { x1, y1, x2, y2 }; }
+      else if ((from || pos) && ext) {
+        const [x1, y1] = from ? at(from) : [+pos.getAttribute("x") / 9525, +pos.getAttribute("y") / 12700];
+        box = { x1, y1, x2: x1 + +ext.getAttribute("cx") / 9525, y2: y1 + +ext.getAttribute("cy") / 12700 };
+      }
+      if (box) for (const k of an.children) take(k, box);
+    }
+  }
+  return { name: sh.name, cells, merges, maxR, maxC, colX, rowY, colAt, shapes, texts };
+}
+const cellText = (S, r, c) => { const v = S.cells.get(`${r},${c}`); return v == null ? "" : String(v); };
+
+// 表の形
+function parseTableSheet(S, B) {
+  const T = (r, c) => cellText(S, r, c);
+  for (let r = 1; r <= S.maxR; r++) for (let c = 1; c <= S.maxC; c++) {
+    if (normLabel(T(r, c)) !== "作業項目") continue;
+    const cs = [], ce = [], cd = [];
+    let noteCol = 0;
+    for (let k = c + 1; k <= S.maxC; k++) {
+      const h = normLabel(T(r, k));
+      if (h === "開始日") cs.push(k); else if (h === "終了日") ce.push(k); else if (h === "日数") cd.push(k); else if (/^(備考|摘要)/.test(h) && !noteCol) noteCol = k;
+    }
+    if (!cs.length && !ce.length) continue;
+    const day = (y, k) => { const v = k ? S.cells.get(`${y},${k}`) : null, n = v == null ? null : cellDay(v, B.d1904); return n == null ? "" : isoOf(n); };
+    const cnt = (y, k) => { const v = k ? S.cells.get(`${y},${k}`) : null, n = v == null ? NaN : Number(toHalf(String(v)).trim()); return isFinite(n) && n > 0 ? String(Math.round(n)) : ""; };
+    const rows = [];
+    let periods = 0, blank = 0;
+    for (let y = r + 1; y <= S.maxR && blank < 50; y++) {
+      const raw = T(y, c), name = clean(raw.replace(/\r?\n/g, ""));
+      if (/^■/.test(name)) break;
+      const row = { name, s: day(y, cs[0]), e: day(y, ce[0]), d: cnt(y, cd[0]), cs: day(y, cs[1]), ce: day(y, ce[1]), cd: cnt(y, cd[1]), note: noteCol ? clean(T(y, noteCol)) : "" };
+      if (!name && !row.s && !row.e && !row.d && !row.cs && !row.ce && !row.cd) { blank++; continue; }
+      blank = 0;
+      if (name && /^[\s　]/.test(raw) && !PLAN_NUM_RE.test(name)) row.lv = "2";
+      if (row.s || row.e || row.d) periods++;
+      rows.push(row);
+    }
+    // 表より上の見出し（工程表自動作成ツールの「工程表の見出し」「設定」）
+    const head = {}, cfg = {}, HL = new Map(HEAD_FIELDS.map(([k, label]) => [normLabel(label), k]));
+    for (let y = 1; y < r; y++) for (let k = 1; k <= Math.min(S.maxC, 8); k++) {
+      const lab = normLabel(T(y, k));
+      if (!lab) continue;
+      let vk = k + 1;
+      while (vk <= k + 3 && T(y, vk) === "") vk++;
+      const v = S.cells.get(`${y},${vk}`);
+      if (v == null || vk > k + 3) continue;
+      const key = HL.get(lab) || (lab === "委託業務名" ? "project" : null);
+      if (key) head[key] = key === "date" ? day(y, vk) : String(v);
+      else if (lab === "日数の数え方") cfg.dayMode = /土日/.test(v) ? "work" : "cal";
+      else if (/^バーの太さ/.test(lab) && Number(v) >= 10 && Number(v) <= 90) cfg.barHeight = String(Number(v));
+      else if (/^(変更前|計画)バーの表示/.test(lab)) { const m = { 塗りつぶし: "fill", 点線: "dash", 白抜き: "outline" }[clean(String(v))]; if (m) cfg.oldStyle = m; }
+    }
+    return { kind: "table", rows, head, cfg, periods };
+  }
+  return null;
+}
+
+// バーの形
+const MONTH_HEAD_RE = /^(?:(令和|平成|R|H)?(\d{4}|\d{1,2}|元)年)?(\d{1,2})月$/;
+const NAME_HEAD_RE = /^(作業)?項目$|^工種|^月別|^名称$/;
+function parseBarSheet(S, B) {
+  const T = (r, c) => cellText(S, r, c);
+  // 1. 月の見出しの行（月が 2 つ以上横に並んでいる行）。「６月」「8年3月」の文字か、月の 1 日の日付（表示を「8年3月」にしたもの）
+  let mRow = 0, heads = [];
+  for (let r = 1; r <= S.maxR && !mRow; r++) {
+    const hs = [];
+    for (let c = 1; c <= S.maxC; c++) {
+      const v = S.cells.get(`${r},${c}`), n = typeof v === "number" ? cellDay(v, B.d1904) : null;
+      if (n != null) { const [yy, mm, dd] = ymdOf(n); if (dd === 1) hs.push({ a: c, m: mm, y: yy }); continue; }
+      const m = MONTH_HEAD_RE.exec(toHalf(normLabel(T(r, c))));
+      if (!m || +m[3] < 1 || +m[3] > 12) continue;
+      const yy = m[2] ? (m[2].length === 4 ? +m[2] : ERA_BASE[m[1] || "令和"] + (m[2] === "元" ? 1 : +m[2])) : 0;
+      hs.push({ a: c, m: +m[3], y: yy });
+    }
+    if (hs.length >= 2) { mRow = r; heads = hs; }
+  }
+  if (!mRow) return null;
+  const gaps = heads.slice(1).map((h, i) => h.a - heads[i].a).sort((p, q) => p - q), W = Math.max(1, gaps[Math.floor(gaps.length / 2)] || 3);
+  const blocks = heads.map((h, i) => Object.assign(h, { b: (heads[i + 1] ? heads[i + 1].a : h.a + W) - 1 }));
+  // 年のない月：シートの中の日付（履行期間・工期など）のいちばん早い年月に合わせ、そこから前後へ数える
+  if (blocks.some(b => !b.y)) {
+    const ym = [];
+    for (const v of S.cells.values()) if (typeof v === "string") ym.push(...findYM(v));
+    S.texts.forEach(t => ym.push(...findYM(t)));
+    const base = ym.length ? ym.reduce((p, q) => (q[0] * 12 + q[1] < p[0] * 12 + p[1] ? q : p)) : ymdOf(Math.floor(Date.now() / DAY_MS + 0.375));
+    let i0 = blocks.findIndex(b => b.m === base[1]);
+    if (i0 < 0) { i0 = 0; blocks[0].y = blocks[0].y || (blocks[0].m <= base[1] ? base[0] : base[0] - 1); } else blocks[i0].y = blocks[i0].y || base[0];
+    for (let i = i0 + 1; i < blocks.length; i++) blocks[i].y = blocks[i].y || blocks[i - 1].y + (blocks[i].m <= blocks[i - 1].m ? 1 : 0);
+    for (let i = i0 - 1; i >= 0; i--) blocks[i].y = blocks[i].y || blocks[i + 1].y - (blocks[i].m >= blocks[i + 1].m ? 1 : 0);
+  }
+  const first = blocks[0].a, last = blocks[blocks.length - 1].b, near = [mRow - 3, mRow - 2, mRow - 1, mRow, mRow + 1, mRow + 2, mRow + 3];
+  // 2. 作業項目の列（「項目」「工種」の見出し。なければ月より左で文字のいちばん多い列）と、摘要・備考の列
+  let nameCol = 0, noteCol = 0;
+  for (const r of near) for (let c = 1; c <= S.maxC; c++) {
+    const h = normLabel(T(r, c));
+    if (!nameCol && c < first && NAME_HEAD_RE.test(h)) nameCol = c;
+    if (!noteCol && c > last && /^(摘要|備考)$/.test(h)) noteCol = c;
+  }
+  if (!nameCol) {
+    const cnt = {};
+    for (let r = mRow + 1; r <= S.maxR; r++) for (let c = 1; c < first; c++) { const v = S.cells.get(`${r},${c}`); if (typeof v === "string" && clean(v)) cnt[c] = (cnt[c] || 0) + 1; }
+    nameCol = +Object.keys(cnt).sort((p, q) => cnt[q] - cnt[p] || p - q)[0] || 0;
+    if (!nameCol) return null;
+  }
+  // 3. 作業の行（次の作業の前の行まで。最後の作業は結合の範囲か、前の作業と同じ行数）
+  const tasks = [];
+  for (let r = mRow + 1; r <= S.maxR; r++) {
+    const raw = T(r, nameCol), name = clean(raw.replace(/\r?\n/g, ""));
+    if (!name || NAME_HEAD_RE.test(normLabel(name))) continue;
+    if (/^[（(]\s*注\s*[）)]/.test(name)) break;   // 注意書きから下は読まない
+    tasks.push({ r, raw, name, bars: [] });
+  }
+  if (!tasks.length) return null;
+  tasks.forEach((t, i) => {
+    const mg = S.merges.find(m => m[0] === t.r && m[1] === nameCol);
+    t.r2 = i + 1 < tasks.length ? tasks[i + 1].r - 1 : Math.max(mg ? mg[2] : t.r, i ? t.r + tasks[i - 1].r2 - tasks[i - 1].r : t.r);
+    t.y1 = S.rowY(t.r); t.y2 = S.rowY(t.r2 + 1);
+  });
+  // 4. 線・バーを作業に振り分ける（月の範囲にあって横に長いもの）
+  const xA = S.colX(first), xB = S.colX(last + 1);
+  for (const s of S.shapes) {
+    const h = s.y2 - s.y1, yc = (s.y1 + s.y2) / 2;
+    if (s.x2 <= xA || s.x1 >= xB || s.x2 - s.x1 < 1 || (s.line ? h > 3 : h > 20)) continue;
+    const t = tasks.find(q => yc >= q.y1 && yc < q.y2);
+    if (t && (s.line || h < (t.y2 - t.y1) * 0.9)) t.bars.push({ x1: Math.max(s.x1, xA), x2: Math.min(s.x2, xB), yc });
+  }
+  // 位置 → 日付。月ごとに上旬・中旬・下旬が同じ幅で並んでいるとして数える（終わりは「その日まで」）
+  const dateAt = (px, end) => {
+    const P = S.colAt(px);
+    let i = blocks.findIndex(b => (end ? P <= b.b + 1 : P < b.b + 1)), f;
+    if (i < 0) { i = blocks.length - 1; f = 3; } else f = Math.max(0, ((P - blocks[i].a) / (blocks[i].b - blocks[i].a + 1)) * 3);
+    const b = blocks[i], j = Math.min(2, Math.floor(f)), len = j < 2 ? 10 : daysInMonth(b.y, b.m) - 20;
+    return dayYMD(b.y, b.m, [1, 11, 21][j]) + Math.round((f - j) * len) - (end ? 1 : 0);
+  };
+  // 線の端のそばに書いた日にちの数字があれば、その日にそろえる（前後の月も見て、いちばん近い日）
+  const snap = (est, list, ok, within) => {
+    let best = null;
+    const [y, m] = ymdOf(est);
+    for (const q of list) {
+      if (q.used || !ok(q.c)) continue;
+      for (const dm of [-1, 0, 1]) {
+        const k = y * 12 + m - 1 + dm, yy = Math.floor(k / 12), mm = k % 12 + 1;
+        if (q.n > daysInMonth(yy, mm)) continue;
+        const cand = dayYMD(yy, mm, q.n), dist = Math.abs(cand - est);
+        if (dist <= within && (!best || dist < best.dist)) best = { q, cand, dist };
+      }
+    }
+    if (!best) return est;
+    best.q.used = true;
+    return best.cand;
+  };
+  const rows = [];
+  let periods = 0;
+  for (const t of tasks) {
+    const nums = [];
+    for (let r = t.r; r <= t.r2; r++) for (let c = first; c <= last; c++) {
+      const v = S.cells.get(`${r},${c}`);
+      if (typeof v === "number" && Number.isInteger(v) && v >= 1 && v <= 31) nums.push({ c, n: v, used: false });
+    }
+    nums.sort((p, q) => p.c - q.c);
+    const per = b => {
+      const c1 = Math.floor(S.colAt(b.x1)), c2 = Math.floor(S.colAt(b.x2 - 0.01));
+      const s = snap(dateAt(b.x1, false), nums, c => c >= c1 - 3 && c <= c1 + 1, 8), e = snap(dateAt(b.x2, true), nums, c => c >= c2 - 1 && c <= c2 + 3, 8);
+      return [s, Math.max(s, e)];
+    };
+    // 上下 2 段なら、上＝計画、下＝実績
+    const bars = t.bars.sort((p, q) => p.x1 - q.x1), ys = bars.map(b => b.yc);
+    let plan = bars, act = [];
+    if (bars.length && Math.max(...ys) - Math.min(...ys) > 2.5) {
+      const mid = (Math.max(...ys) + Math.min(...ys)) / 2;
+      plan = bars.filter(b => b.yc <= mid); act = bars.filter(b => b.yc > mid);
+    }
+    const P = plan.map(per), A = act.map(per);
+    // 線がなく数字だけの作業：左から 2 つずつ（始め・終わり）
+    if (!bars.length) for (let i = 0; i + 1 < nums.length; i += 2) {
+      const a = nums[i], b = nums[i + 1];
+      const s = snap(dateAt(S.colX(a.c + 1), false), [a], () => true, 12), e = snap(dateAt(S.colX(b.c), true), [b], () => true, 12);
+      P.push([s, Math.max(s, e)]);
+    }
+    let note = "";
+    if (noteCol) for (let r = t.r; r <= t.r2 && !note; r++) note = clean(T(r, noteCol).replace(/\r?\n/g, " "));
+    const lv = /^[\s　]/.test(t.raw) && !PLAN_NUM_RE.test(t.name) ? "2" : "";
+    if (!P.length) rows.push({ name: t.name, lv, note });
+    P.forEach((p, i) => {
+      const a = A[i], row = { name: i ? "" : t.name, lv: i ? "" : lv, s: isoOf(p[0]), e: isoOf(p[1]), note: i ? "" : note };
+      if (a && (a[0] !== p[0] || a[1] !== p[1])) { row.cs = isoOf(a[0]); row.ce = isoOf(a[1]); }
+      rows.push(row);
+    });
+    periods += P.length;
+  }
+  // 見出し：業務名と宛先（月の見出しより上）
+  const head = {};
+  for (let r = 1; r < mRow; r++) for (let c = 1; c <= S.maxC; c++) {
+    const lab = normLabel(T(r, c));
+    if (!head.project && /^(委託)?業務名$/.test(lab)) { for (let k = c + 1; k <= S.maxC; k++) if (clean(T(r, k))) { head.project = clean(T(r, k)); break; } }
+    if (!head.to && /[殿様]$/.test(lab) && lab.length > 2) head.to = clean(T(r, c));
+  }
+  return { kind: "bar", rows, head, cfg: {}, periods };
+}
+
+// シートを選ぶ（読めるシートが 2 つ以上あるとき）
+function pickSheet(found) {
+  return new Promise(resolve => {
+    const dlg = $("xlPick");
+    $("xlPickList").innerHTML = found.map((f, i) => `<button type="button" class="btn" data-i="${i}"><b>${esc(f.sheet)}</b>`
+      + `<span>${f.kind === "table" ? "表" : "バー"}・${f.rows.filter(r => clean(r.name)).length} 作業・${f.periods} 期間${f.rows.some(r => r.cs || r.ce) ? "（実績あり）" : ""}</span></button>`).join("");
+    const done = v => { dlg.close(); $("xlPickList").onclick = null; $("xlPickCancel").onclick = null; dlg.oncancel = null; resolve(v); };
+    $("xlPickList").onclick = e => { const b = e.target.closest("[data-i]"); if (b) done(found[+b.dataset.i]); };
+    $("xlPickCancel").onclick = () => done(null);
+    dlg.oncancel = () => done(null);
+    dlg.showModal();
+  });
+}
+async function importExcel(file) {
+  let B;
+  try { B = await readWorkbook(await file.arrayBuffer()); } catch (e) { toast("この Excel は読めません。.xlsx か .xlsm のファイルを選んでください（古い .xls は、Excel で .xlsx に保存し直してください）。"); return; }
+  const found = [];
+  for (const sh of B.sheets) {
+    if (!sh.part || sh.state === "veryHidden") continue;
+    try {
+      const S = await readSheet(B, sh), r = parseTableSheet(S, B) || parseBarSheet(S, B);
+      if (r && r.periods) found.push(Object.assign(r, { sheet: sh.name.trim() }));
+    } catch (e) { /* 読めないシートは飛ばす */ }
+  }
+  if (!found.length) { toast("作業と日付が見つかりませんでした。「作業項目・開始日・終了日」の見出しがある表か、月の見出しと線・バーのある工程表を選んでください。"); return; }
+  const pick = found.length === 1 ? found[0] : await pickSheet(found);
+  if (!pick) return;
+  commit();
+  sched.rows = pick.rows.map(r => newRow(r));
+  Object.entries(pick.head).forEach(([k, v]) => { if (clean(String(v || ""))) sched.head[k] = String(v); });
+  Object.assign(sched.cfg, pick.cfg);
+  sched.ignoreSync = flowSignature();
+  sched.noAuto = true;
+  fillFields();
+  renderTasks();
+  planUpdate();
+  showHolidays();
+  commit();
+  const n = pick.rows.filter(r => clean(r.name)).length;
+  toast(`「${pick.sheet}」から ${n} 作業を読み込みました。${pick.kind === "bar" ? "線の位置と数字から読んだ日付なので、確かめてください。" : ""}`, "元に戻す", undo);
+}
+$("fileXlsx").addEventListener("change", e => {
+  const f = e.target.files && e.target.files[0];
+  e.target.value = "";
+  if (f) importExcel(f);
 });
 
 function planBaseName() {
