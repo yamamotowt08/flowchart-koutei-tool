@@ -423,7 +423,7 @@ table.reptbl.items tr.top td:first-child { font-weight: 700; }
       <div class="board">
         <div class="scroller"><div class="paper rpaper" id="rPaper"></div></div>
       </div>
-      <div class="stats"><span id="rStats"></span><span>Excel で保存すると、表と折れ線グラフ（黒＝計画、赤＝実績）の入った履行報告書になります。グラフは Excel のグラフのまま直せます。</span></div>
+      <div class="stats"><span id="rStats"></span><span>Excel で保存すると、表と折れ線グラフ（黒の点線＝計画、赤＝実績）の入った履行報告書になります。グラフは Excel のグラフのまま直せます。</span></div>
     </section>
   </main>
 </div>
@@ -4105,15 +4105,16 @@ function reportSvg(RM) {
     if ((i + 1) % step && i !== RM.k) return;
     out.push(`<text x="${f1(X(i + 1))}" y="${T + ph + 16}" text-anchor="middle" font-size="11" fill="${i === RM.k ? "#C00000" : "#404040"}">${esc(chartLabel(x, i))}</text>`);
   });
-  const line = (key, color) => {
+  const DOT = 'stroke-dasharray="1 5" stroke-linecap="round"';   // 計画は点線
+  const line = (key, color, dash = "") => {
     const xy = pts.map((x, i) => (x[key] == null ? null : [X(i), Y(x[key])])).filter(Boolean);
-    out.push(`<polyline points="${xy.map(p => p.map(f1).join(",")).join(" ")}" fill="none" stroke="${color}" stroke-width="2.25" stroke-linejoin="round"/>`);
+    out.push(`<polyline points="${xy.map(p => p.map(f1).join(",")).join(" ")}" fill="none" stroke="${color}" stroke-width="2.25" stroke-linejoin="round"${dash ? " " + dash : ""}/>`);
     xy.forEach(p => out.push(`<circle cx="${f1(p[0])}" cy="${f1(p[1])}" r="3.5" fill="${color}"/>`));
   };
-  line("plan", "#000000");
+  line("plan", "#000000", DOT);
   line("act", "#C00000");
   const lx = W / 2 - 80, ly = Hh - 18;
-  out.push(`<line x1="${lx}" y1="${ly}" x2="${lx + 28}" y2="${ly}" stroke="#000" stroke-width="2.25"/><text x="${lx + 34}" y="${ly}" dominant-baseline="central" font-size="12">計画</text>`);
+  out.push(`<line x1="${lx}" y1="${ly}" x2="${lx + 28}" y2="${ly}" stroke="#000" stroke-width="2.25" ${DOT}/><text x="${lx + 34}" y="${ly}" dominant-baseline="central" font-size="12">計画</text>`);
   out.push(`<line x1="${lx + 90}" y1="${ly}" x2="${lx + 118}" y2="${ly}" stroke="#C00000" stroke-width="2.25"/><text x="${lx + 124}" y="${ly}" dominant-baseline="central" font-size="12">実績</text>`);
   out.push("</svg>");
   return out.join("");
@@ -4284,7 +4285,7 @@ function reportXlsxParts(RM, sc) {
   }
   // グラフ（表の値を使う Excel の折れ線グラフ）
   blocks.push([r, r + 16]);
-  put(r, 1, secTitle("進捗グラフ（黒：計画、赤：実績）"), { b: true }); merge(r, 1, r, LAST); r++;
+  put(r, 1, secTitle("進捗グラフ（黒の点線：計画、赤：実績）"), { b: true }); merge(r, 1, r, LAST); r++;
   const chartTop = r, chartRows = 16;
   r += chartRows + 1;
   // 3〜5. 文章
@@ -4342,13 +4343,13 @@ function reportXlsxParts(RM, sc) {
   const cols = widths.map((w, j) => `<col min="${j + 1}" max="${j + 1}" width="${colWidth(w).w}" customWidth="1"/>`).join("");
   const mergeXml = merges.map(m => `<mergeCell ref="${colName(m[1])}${m[0]}:${colName(m[3])}${m[2]}"/>`).join("");
 
-  // グラフ：黒＝計画、赤＝実績（報告する月まで）。値は表のセルを参照する（最初の行は着手時の 0%）
+  // グラフ：黒の点線＝計画、赤＝実績（報告する月まで）。値は表のセルを参照する（最初の行は着手時の 0%）
   const q = `'${SHEET}'`, n = months.length + 1;
   const ref = col => `${q}!$${col}$${first}:$${col}$${lastM}`;
   const cache = vals => `<c:numCache><c:formatCode>0.0%</c:formatCode><c:ptCount val="${n}"/>${vals.map((v, i) => (v == null ? "" : `<c:pt idx="${i}"><c:v>${Math.round(v * 100000) / 100000}</c:v></c:pt>`)).join("")}</c:numCache>`;
   const cats = `<c:cat><c:strRef><c:f>${ref("A")}</c:f><c:strCache><c:ptCount val="${n}"/>${[RM.start.label].concat(months.map(x => x.label)).map((t, i) => `<c:pt idx="${i}"><c:v>${xesc(t)}</c:v></c:pt>`).join("")}</c:strCache></c:strRef></c:cat>`;
-  const ser = (i, name, col, color, vals) => `<c:ser><c:idx val="${i}"/><c:order val="${i}"/><c:tx><c:v>${name}</c:v></c:tx>`
-    + `<c:spPr><a:ln w="28575" cap="rnd"><a:solidFill><a:srgbClr val="${color}"/></a:solidFill><a:round/></a:ln></c:spPr>`
+  const ser = (i, name, col, color, vals, dash) => `<c:ser><c:idx val="${i}"/><c:order val="${i}"/><c:tx><c:v>${name}</c:v></c:tx>`
+    + `<c:spPr><a:ln w="28575" cap="rnd"><a:solidFill><a:srgbClr val="${color}"/></a:solidFill>${dash ? `<a:prstDash val="${dash}"/>` : ""}<a:round/></a:ln></c:spPr>`
     + `<c:marker><c:symbol val="circle"/><c:size val="5"/><c:spPr><a:solidFill><a:srgbClr val="${color}"/></a:solidFill><a:ln w="9525"><a:solidFill><a:srgbClr val="${color}"/></a:solidFill></a:ln></c:spPr></c:marker>`
     + `${cats}<c:val><c:numRef><c:f>${ref(col)}</c:f>${cache(vals)}</c:numRef></c:val><c:smooth val="0"/></c:ser>`;
   const txt = (sz, b) => `<c:txPr><a:bodyPr/><a:lstStyle/><a:p><a:pPr><a:defRPr sz="${sz}"${b ? ' b="1"' : ""}><a:latin typeface="ＭＳ 明朝"/><a:ea typeface="ＭＳ 明朝"/></a:defRPr></a:pPr><a:endParaRPr lang="ja-JP"/></a:p></c:txPr>`;
@@ -4357,7 +4358,7 @@ function reportXlsxParts(RM, sc) {
     + `<c:lang val="ja-JP"/><c:roundedCorners val="0"/><c:chart>`
     + `<c:title><c:tx><c:rich><a:bodyPr/><a:lstStyle/><a:p><a:pPr><a:defRPr sz="1200" b="1"/></a:pPr><a:r><a:rPr lang="ja-JP" sz="1200" b="1"><a:latin typeface="ＭＳ 明朝"/><a:ea typeface="ＭＳ 明朝"/></a:rPr><a:t>進捗状況（計画・実績）</a:t></a:r></a:p></c:rich></c:tx><c:overlay val="0"/></c:title>`
     + `<c:autoTitleDeleted val="0"/><c:plotArea><c:layout/><c:lineChart><c:grouping val="standard"/><c:varyColors val="0"/>`
-    + ser(0, "計画", "B", "000000", [0].concat(months.map(x => x.plan)))
+    + ser(0, "計画", "B", "000000", [0].concat(months.map(x => x.plan)), "sysDot")
     + ser(1, "実績", "C", "C00000", [0].concat(months.map(x => x.act)))
     + `<c:marker val="1"/><c:axId val="50010001"/><c:axId val="50010002"/></c:lineChart>`
     + `<c:catAx><c:axId val="50010001"/><c:scaling><c:orientation val="minMax"/></c:scaling><c:delete val="0"/><c:axPos val="b"/><c:numFmt formatCode="General" sourceLinked="0"/><c:majorTickMark val="out"/><c:minorTickMark val="none"/><c:tickLblPos val="low"/>${gray}${txt(900)}<c:crossAx val="50010002"/><c:crosses val="autoZero"/><c:auto val="1"/><c:lblAlgn val="ctr"/><c:lblOffset val="100"/><c:noMultiLvlLbl val="0"/></c:catAx>`
@@ -4641,7 +4642,7 @@ function gyomuXlsxParts(RM, sc) {
     + `<c:lang val="ja-JP"/><c:roundedCorners val="0"/><c:chart>`
     + `<c:title><c:tx><c:rich><a:bodyPr/><a:lstStyle/><a:p><a:pPr><a:defRPr sz="1400" b="1"/></a:pPr><a:r><a:rPr lang="ja-JP" sz="1400" b="1"><a:latin typeface="ＭＳ Ｐゴシック"/><a:ea typeface="ＭＳ Ｐゴシック"/></a:rPr><a:t>作業進捗率</a:t></a:r></a:p></c:rich></c:tx><c:overlay val="0"/></c:title>`
     + `<c:autoTitleDeleted val="0"/><c:plotArea><c:layout/><c:lineChart><c:grouping val="standard"/><c:varyColors val="0"/>`
-    + ser(0, "計画", cP, "000000", "dashDot", [0].concat(months.map(x => pctInt(x.plan))))
+    + ser(0, "計画", cP, "000000", "sysDot", [0].concat(months.map(x => pctInt(x.plan))))
     + ser(1, "実績", cA, "FF0000", "", [0].concat(months.map(x => (x.act == null ? null : pctInt(x.act)))))
     + `<c:marker val="1"/><c:axId val="50020001"/><c:axId val="50020002"/></c:lineChart>`
     + `<c:catAx><c:axId val="50020001"/><c:scaling><c:orientation val="minMax"/></c:scaling><c:delete val="0"/><c:axPos val="b"/>${grid}<c:numFmt formatCode="General" sourceLinked="0"/><c:majorTickMark val="none"/><c:minorTickMark val="none"/><c:tickLblPos val="nextTo"/>${noLine}${font(1000)}<c:crossAx val="50020002"/><c:crosses val="autoZero"/><c:auto val="1"/><c:lblAlgn val="ctr"/><c:lblOffset val="100"/><c:noMultiLvlLbl val="0"/></c:catAx>`
