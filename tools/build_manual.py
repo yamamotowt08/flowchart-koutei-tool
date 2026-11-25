@@ -184,7 +184,7 @@ for _ in range(3): doc.add_paragraph()
 para('フローチャート・工程表作成ツール', 24, True, ACCENT, WD_ALIGN_PARAGRAPH.CENTER, 8)
 para('操作説明書', 22, True, None, WD_ALIGN_PARAGRAPH.CENTER, 36)
 img('f_paper', 4.6)
-para('バージョン 1.10.0', 10.5, None, None, WD_ALIGN_PARAGRAPH.CENTER, 18)
+para('バージョン 1.10.1', 10.5, None, None, WD_ALIGN_PARAGRAPH.CENTER, 18)
 p = doc.add_paragraph(); p.alignment = WD_ALIGN_PARAGRAPH.LEFT
 for i, t in enumerate(['概要', '動作環境と起動', '画面構成', 'フローチャートの作成', '図の編集', 'PowerPoint への出力',
                        '工程表の作成', 'Excel への出力', '工程表からフローチャートへの反映', '履行報告書・業務履行報告書の作成', '入力の保存と読み込み', 'よくある質問']):
