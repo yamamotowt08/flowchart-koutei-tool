@@ -209,6 +209,9 @@ table.reptbl input { width: 6.5em; text-align: right; }
 table.reptbl tr.cur td { background: var(--accent-soft); font-weight: 700; }
 table.reptbl tr.after td { color: var(--muted); }
 table.reptbl .minus { color: var(--chg); }
+table.reptbl.items :is(td, th):is(:nth-child(2), :nth-child(3), :nth-child(6)) { text-align: left; }
+table.reptbl.items tr.sub td:first-child { padding-left: 1.8em; font-weight: 400; }
+table.reptbl.items tr.top td:first-child { font-weight: 700; }
 .gpaper svg { display: block; width: 100%; height: auto; }
 @media (prefers-reduced-motion: no-preference) { .toast { animation: rise .18s ease-out; } @keyframes rise { from { transform: translate(-50%, 8px); opacity: .4; } } }
 </style>
@@ -404,6 +407,16 @@ table.reptbl .minus { color: var(--chg); }
         </div>
       </section>
     </div>
+    <section class="sheet" id="repItemsSec" aria-labelledby="hRepItems" hidden>
+      <div class="sheet-head"><h2 id="hRepItems">作業項目ごとの進捗（業務履行報告書）</h2></div>
+      <p class="hint">報告する月の月末時点の進捗です。各作業の期間のうち、経過した日数の割合で計算します（計画は当初の日付、実績は変更後の日付）。日付のない見出しは、その下の小項目をまとめた値です。</p>
+      <div class="rep-wrap">
+        <table class="reptbl items">
+          <thead><tr><th>作業項目</th><th>計画期間</th><th>変更後</th><th>計画</th><th>実績</th><th>状況</th></tr></thead>
+          <tbody id="repItems"></tbody>
+        </table>
+      </div>
+    </section>
     <section class="stage" aria-label="進捗グラフのプレビュー">
       <div class="board">
         <div class="scroller"><div class="paper rpaper" id="rPaper"></div></div>
@@ -2659,8 +2672,9 @@ function defaultSched() {
   return { head, cfg: Object.assign({}, CFG_DEFAULT), rows: [], ignoreSync: "", report: defaultReport() };
 }
 // 履行報告書：報告する月（2026-05）、報告日、文章（空なら工程表から作る）、手で入れた実施の進捗率（月ごと、%）
-const REP_TEXT = ["month", "date", "done", "next", "remarks"];
-const defaultReport = () => ({ month: "", date: "", done: "", next: "", remarks: "", actual: {} });
+const REP_TEXT = ["form", "month", "date", "done", "next", "remarks"];
+// form：rep＝履行報告書、gyomu＝業務履行報告書（作業項目ごとの進捗の表も付ける）
+const defaultReport = () => ({ form: "rep", month: "", date: "", done: "", next: "", remarks: "", actual: {} });
 function normalizeSched(o) {
   const sc = defaultSched();
   if (!o || typeof o !== "object") return sc;
@@ -3982,22 +3996,24 @@ const pct1 = v => (v == null ? "" : (Math.round(v * 1000) / 10).toFixed(1));
 const monthLabel = (y, m) => { const [g, e] = eraOf(dayYMD(y, m, 1)); return `${g}${e}年${m}月`; };
 function reportModel(sc) {
   const R = computeSched(sc), t = dayTools(sc), rp = sc.report;
-  const plan = [], act = [];
-  R.pers.forEach(p => {
-    if (p.hasOrig) plan.push({ s: p.s, e: p.e, item: p.item });
-    act.push(p.hasChg ? { s: p.cs, e: p.ce, item: p.item } : { s: p.s, e: p.e, item: p.item });
+  // 期間ごとに、計画（当初の日付）と実績（変更後の日付。なければ当初）、重み＝計画の日数
+  const per = R.pers.map(p => {
+    const ps = p.hasOrig ? p.s : p.cs, pe = p.hasOrig ? p.e : p.ce;
+    return { item: p.item, ps, pe, as: p.hasChg ? p.cs : p.s, ae: p.hasChg ? p.ce : p.e, w: t.countDays(ps, pe) };
   });
-  if (!plan.length) return { R, months: [] };
-  const days = list => list.reduce((v, p) => v + t.countDays(p.s, p.e), 0);
-  const upto = (list, D) => list.reduce((v, p) => v + (p.s > D ? 0 : t.countDays(p.s, Math.min(p.e, D))), 0);
-  const pT = days(plan), aT = days(act);
+  if (!per.length) return { R, months: [] };
+  if (!per.some(p => p.w)) per.forEach(p => { p.w = 1; });
+  // その日までに、その期間がどれだけ進んだか（経過した日数の割合。0〜1）
+  const frac = (s, e, D) => { if (D < s) return 0; if (D >= e) return 1; const n = t.countDays(s, e); return n ? t.countDays(s, D) / n : 0; };
+  const progress = (list, D, act) => { const W = list.reduce((v, p) => v + p.w, 0); return W ? list.reduce((v, p) => v + p.w * (act ? frac(p.as, p.ae, D) : frac(p.ps, p.pe, D)), 0) / W : 0; };
+  const plan = per.map(p => ({ s: p.ps, e: p.pe, item: p.item })), act = per.map(p => ({ s: p.as, e: p.ae, item: p.item }));
   const all = plan.concat(act), S = Math.min(...all.map(p => p.s)), E = Math.max(...all.map(p => p.e));
   const [sy, sm] = ymdOf(S), [ey, em] = ymdOf(E);
   const months = [];
   for (let y = sy, m = sm; (y < ey || (y === ey && m <= em)) && months.length < 120; m === 12 ? (y++, m = 1) : m++) {
     const first = dayYMD(y, m, 1), last = dayYMD(m === 12 ? y + 1 : y, m === 12 ? 1 : m + 1, 1) - 1;
     months.push({ key: `${y}-${String(m).padStart(2, "0")}`, y, m, first, last, label: monthLabel(y, m),
-                  plan: pT ? upto(plan, last) / pT : 0, auto: aT ? upto(act, last) / aT : 0 });
+                  plan: progress(per, last, false), auto: progress(per, last, true) });
   }
   // 報告する月：選んだ月。なければ今日の月（期間の前なら最初、後なら最後の月）
   let k = months.findIndex(x => x.key === rp.month);
@@ -4019,7 +4035,26 @@ function reportModel(sc) {
   const bullet = list => list.map(n => `・${n}`).join("\n");
   const doneAuto = bullet(inRange(cur.first, cur.last)) || "・なし";
   const nextAuto = nf > E ? "・業務完了" : bullet(inRange(nf, nl)) || "・なし";
-  return { R, months, k, cur, S, E, date: dayOf(rp.date) ?? cur.last, doneAuto, nextAuto };
+  // 作業項目ごとの進捗（報告する月の月末）。期間のない見出しは、その下の小項目をまとめる
+  const D = cur.last, items = [];
+  R.items.forEach((it, i) => {
+    const row = sc.rows[it.row], depth = row ? rowLevel(row) : 1;
+    let list = per.filter(p => p.item === i);
+    if (!list.length && depth === 1) {
+      const kids = [];
+      for (let j = i + 1; j < R.items.length; j++) { const rj = sc.rows[R.items[j].row]; if (!rj || rowLevel(rj) === 1) break; kids.push(j); }
+      list = per.filter(p => kids.includes(p.item));
+    }
+    if (!list.length) return;
+    const pl = progress(list, D, false), ac = progress(list, D, true);
+    const ps = Math.min(...list.map(p => p.ps)), pe = Math.max(...list.map(p => p.pe));
+    const as = Math.min(...list.map(p => p.as)), ae = Math.max(...list.map(p => p.ae));
+    const n = per.filter(p => p.item === i).length;
+    const state = ac >= 1 ? "完了" : ac <= 0 ? (pl > 0 ? "未着手（遅れ）" : "未着手") : ac < pl - 1e-9 ? "実施中（遅れ）" : "実施中";
+    items.push({ name: it.name, depth, plan: pl, act: ac, period: `${md(ps)}〜${md(pe)}${n > 1 ? `（${n}回）` : ""}`,
+                 change: as !== ps || ae !== pe ? `${md(as)}〜${md(ae)}` : "", state });
+  });
+  return { R, months, k, cur, S, E, date: dayOf(rp.date) ?? cur.last, doneAuto, nextAuto, items };
 }
 
 // 折れ線グラフ（画面の確認用。Excel では Excel のグラフにする）
@@ -4057,6 +4092,7 @@ function reportSvg(RM) {
 const chartLabel = (x, i) => (i === 0 || x.m === 1 ? `${eraOf(x.first)[1]}年${x.m}月` : `${x.m}月`);
 
 const REP_FIELDS = [
+  ["form", "様式", "select"],
   ["month", "報告する月", "select"],
   ["date", "報告日", "date", "空なら、報告する月の末日"],
   ["done", "今月の実施内容", "textarea", "空なら、工程表からこの文章を入れます"],
@@ -4065,7 +4101,8 @@ const REP_FIELDS = [
 ];
 function buildRepFields() {
   $("repFields").innerHTML = REP_FIELDS.map(([k, label, type, note]) => {
-    const ctl = type === "select" ? `<select id="r_${k}" data-r="${k}"></select>`
+    const ctl = k === "form" ? `<select id="r_form" data-r="form"><option value="rep">履行報告書</option><option value="gyomu">業務履行報告書（作業項目ごとの進捗も付ける）</option></select>`
+      : type === "select" ? `<select id="r_${k}" data-r="${k}"></select>`
       : type === "textarea" ? `<textarea id="r_${k}" data-r="${k}" rows="4"></textarea>`
       : `<input id="r_${k}" type="${type}" data-r="${k}">`;
     return `<label for="r_${k}">${label}</label>${ctl}${note ? `<span class="note">${esc(note)}</span>` : ""}`;
@@ -4079,6 +4116,7 @@ function renderReport(full = true) {
     $("rPaper").innerHTML = `<svg viewBox="0 0 600 120" xmlns="http://www.w3.org/2000/svg"><rect width="600" height="120" fill="#FFF"/><text x="300" y="66" text-anchor="middle" class="empty">工程表に日付を入れると、ここに進捗グラフができます</text></svg>`;
     $("rStats").textContent = "まだ進捗はありません";
     $("r_month").innerHTML = "";
+    $("repItemsSec").hidden = true;
     return;
   }
   const diff = x => (x.act == null ? "" : `${x.act - x.plan >= 0 ? "+" : ""}${pct1(x.act - x.plan)}`);
@@ -4088,8 +4126,15 @@ function renderReport(full = true) {
       + `<td>${x.label}</td><td>${pct1(x.plan)}%</td>`
       + `<td><input type="text" inputmode="decimal" data-act="${x.key}" value="${esc(rp.actual[x.key] || "")}" placeholder="${i > RM.k ? "" : pct1(x.auto)}" aria-label="${x.label}の実績（%）"${i > RM.k ? " disabled" : ""}> %</td>`
       + `<td class="d"></td></tr>`).join("");
-    REP_TEXT.filter(k => k !== "month").forEach(k => { const el = $(`r_${k}`); if (el && document.activeElement !== el) el.value = rp[k]; });
+    REP_TEXT.filter(k => k !== "month" && k !== "form").forEach(k => { const el = $(`r_${k}`); if (el && document.activeElement !== el) el.value = rp[k]; });
+    $("r_form").value = rp.form === "gyomu" ? "gyomu" : "rep";
   }
+  // 業務履行報告書：作業項目ごとの進捗
+  const gyomu = rp.form === "gyomu";
+  $("repItemsSec").hidden = !gyomu;
+  if (gyomu) $("repItems").innerHTML = RM.items.map(it => `<tr class="${it.depth === 2 ? "sub" : "top"}"><td>${esc(it.name)}</td><td>${esc(it.period)}</td><td>${esc(it.change)}</td>`
+    + `<td>${pct1(it.plan)}%</td><td>${pct1(it.act)}%</td><td class="${/遅れ/.test(it.state) ? "minus" : ""}">${esc(it.state)}</td></tr>`).join("")
+    || `<tr><td colspan="6" class="hint">日付の入った作業がありません。</td></tr>`;
   [...$("repRows").querySelectorAll("tr[data-key]")].forEach((tr, i) => {
     const x = RM.months[i], d = tr.querySelector("td.d");
     if (!x || !d) return;
@@ -4107,7 +4152,7 @@ $("repFields").addEventListener("input", e => {
   const k = e.target.dataset.r;
   if (!k) return;
   sched.report[k] = e.target.value;
-  renderReport(k === "month");
+  renderReport(k === "month" || k === "form");
   savePlan();
 });
 $("repFields").addEventListener("change", () => commit());
@@ -4121,8 +4166,11 @@ $("repRows").addEventListener("input", e => {
 $("repRows").addEventListener("change", () => commit());
 
 // ---------- 履行報告書の Excel（表と折れ線グラフ） ----------
+const rp_form = sc => (sc.report.form === "gyomu" ? "gyomu" : "rep");
 function reportXlsxParts(RM, sc) {
-  const H = sc.head, rp = sc.report, months = RM.months, k = RM.k, SHEET = "履行報告書";
+  const gyomu = rp_form(sc) === "gyomu", H = sc.head, rp = sc.report, months = RM.months, k = RM.k, SHEET = gyomu ? "業務履行報告書" : "履行報告書";
+  let sec = 0;
+  const secTitle = t => `${"１２３４５６７８９"[sec++]}．${t}`;
   const cells = new Map(), rowH = {}, merges = [];
   const at = (r, c) => { const key = `${r},${c}`; if (!cells.has(key)) cells.set(key, { r, c }); return cells.get(key); };
   const put = (r, c, v, st = {}) => Object.assign(at(r, c), { v }, st);
@@ -4133,7 +4181,7 @@ function reportXlsxParts(RM, sc) {
   // 見出し
   let r = 1;
   put(r, 6, RM.date, { t: "d", ha: "right" }); merge(r, 6, r, LAST);
-  r = 3; put(r, 1, "履　行　報　告　書", { sz: 18, b: true, ha: "center", va: "center" }); merge(r, 1, r, LAST); rowH[r] = 34;
+  r = 3; put(r, 1, gyomu ? "業　務　履　行　報　告　書" : "履　行　報　告　書", { sz: 18, b: true, ha: "center", va: "center" }); merge(r, 1, r, LAST); rowH[r] = 34;
   r = 5; put(r, 1, H.to || "", { sz: 12 }); merge(r, 1, r, 5);
   r = 7;
   put(r, 5, "受注者", { ha: "right" });
@@ -4154,7 +4202,7 @@ function reportXlsxParts(RM, sc) {
   }
   // 1. 月ごとの進捗率
   r++;
-  put(r, 1, "１．進捗状況（日数の割合による）", { b: true }); merge(r, 1, r, LAST); r++;
+  put(r, 1, secTitle("進捗状況（日数の割合による）"), { b: true }); merge(r, 1, r, LAST); r++;
   const hr = r;
   ["月（月末）", "計画", "実績", "差", "備考"].forEach((t, j) => put(r, j + 1, t, { ha: "center", va: "center", b: true }));
   merge(r, 5, r, LAST); frame(r, 1, r, LAST); r++;
@@ -4167,18 +4215,38 @@ function reportXlsxParts(RM, sc) {
     merge(r, 5, r, LAST); frame(r, 1, r, LAST); r++;
   });
   const lastM = r - 1;
-  // 2. グラフ（表の値を使う Excel の折れ線グラフ）
   r++;
   const blocks = [[1, r - 2]];   // ページをまたがせないかたまり（最初の行, 最後の行）
+  // 業務履行報告書：作業項目ごとの進捗（報告する月の月末）。行の途中ではページを分けない
+  if (gyomu && RM.items.length) {
+    // 1 ページに入るなら表をまるごと 1 つのかたまりに、入らなければ行ごとに分ける
+    const whole = (RM.items.length + 2) * 18 <= 680;
+    blocks.push([r, whole ? r + 1 + RM.items.length : r + 2]);
+    put(r, 1, secTitle(`作業項目ごとの進捗（${c.label}末現在）`), { b: true }); merge(r, 1, r, LAST); r++;
+    [["作業項目", 1], ["計画期間", 4], ["変更後", 5], ["計画", 6], ["実績", 7], ["状況", 8]].forEach(([t, col]) => put(r, col, t, { ha: "center", b: true }));
+    merge(r, 1, r, 3); frame(r, 1, r, LAST); r++;
+    RM.items.forEach((it, i) => {
+      if (i && !whole) blocks.push([r, r]);
+      put(r, 1, it.name, { ha: "left", indent: it.depth === 2 ? 2 : 0, b: it.depth === 1, shrink: true });
+      put(r, 4, it.period, { ha: "center", shrink: true });
+      put(r, 5, it.change, { ha: "center", shrink: true, color: it.change ? "C00000" : "" });
+      put(r, 6, it.plan, { t: "pct", ha: "right" });
+      put(r, 7, it.act, { t: "pct", ha: "right", color: "C00000" });
+      put(r, 8, it.state, { ha: "center", shrink: true, color: /遅れ/.test(it.state) ? "C00000" : "" });
+      merge(r, 1, r, 3); frame(r, 1, r, LAST); r++;
+    });
+    r++;
+  }
+  // グラフ（表の値を使う Excel の折れ線グラフ）
   blocks.push([r, r + 16]);
-  put(r, 1, "２．進捗グラフ（黒：計画、赤：実績）", { b: true }); merge(r, 1, r, LAST); r++;
+  put(r, 1, secTitle("進捗グラフ（黒：計画、赤：実績）"), { b: true }); merge(r, 1, r, LAST); r++;
   const chartTop = r, chartRows = 16;
   r += chartRows + 1;
   // 3〜5. 文章
-  const texts = [["３．今月の実施内容", clean(rp.done) ? rp.done : RM.doneAuto], ["４．来月の予定", clean(rp.next) ? rp.next : RM.nextAuto], ["５．備考", rp.remarks || ""]];
+  const texts = [["今月の実施内容", clean(rp.done) ? rp.done : RM.doneAuto], ["来月の予定", clean(rp.next) ? rp.next : RM.nextAuto], ["備考", rp.remarks || ""]];
   for (const [title, body] of texts) {
     blocks.push([r, r + 1]);
-    put(r, 1, title, { b: true }); merge(r, 1, r, LAST); r++;
+    put(r, 1, secTitle(title), { b: true }); merge(r, 1, r, LAST); r++;
     const txt = String(body).replace(/\r\n?/g, "\n").replace(/\s+$/, "");
     put(r, 1, txt, { va: "top", wrap: true, indent: 1 }); merge(r, 1, r, LAST); frame(r, 1, r, LAST);
     rowH[r] = Math.max(2, lines(txt)) * 15 + 8; r += 2;
@@ -4205,7 +4273,7 @@ function reportXlsxParts(RM, sc) {
   const FMT = { d: 164, pct: 166, diff: 167 };
   const xfId = cl => {
     const fmt = FMT[cl.t] || 0, fid = fontId(cl.sz || 10.5, cl.b, cl.color), bid = cl.border ? 1 : 0;
-    const al = [cl.ha && `horizontal="${cl.ha}"`, `vertical="${cl.va || "center"}"`, cl.wrap && 'wrapText="1"', cl.indent && `indent="${cl.indent}"`].filter(Boolean).join(" ");
+    const al = [cl.ha && `horizontal="${cl.ha}"`, `vertical="${cl.va || "center"}"`, cl.wrap && 'wrapText="1"', cl.shrink && 'shrinkToFit="1"', cl.indent && `indent="${cl.indent}"`].filter(Boolean).join(" ");
     const key = `${fmt}|${fid}|${bid}|${al}`;
     if (!(key in xfIx)) { xfIx[key] = xfs.length; xfs.push(`<xf numFmtId="${fmt}" fontId="${fid}" fillId="0" borderId="${bid}" xfId="0"${fmt ? ' applyNumberFormat="1"' : ""} applyFont="1"${bid ? ' applyBorder="1"' : ""} applyAlignment="1"><alignment ${al}/></xf>`); }
     return xfIx[key];
@@ -4286,7 +4354,7 @@ async function saveReport() {
   if (!RM.months.length) { toast("工程表に、日付の入った作業がありません。"); return; }
   const blob = new Blob([zipBytes(reportXlsxParts(RM, sched))], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
   const t = clean(sched.head.project || "");
-  const name = (`履行報告書_${RM.cur.label}${t ? `_${t}` : ""}`).replace(/[\\/:*?"<>|]/g, "_").slice(0, 70);
+  const name = (`${rp_form(sched) === "gyomu" ? "業務履行報告書" : "履行報告書"}_${RM.cur.label}${t ? `_${t}` : ""}`).replace(/[\\/:*?"<>|]/g, "_").slice(0, 70);
   try {
     if (await saveFile(name + ".xlsx", blob)) toast("保存しました。Excel で開くと、表もグラフもそのまま直せます。");
   } catch (e) {
