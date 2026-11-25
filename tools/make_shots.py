@@ -30,9 +30,9 @@ SCENES = {
       newRow({name:'比較検討', lv:'2', s:'2026-04-11', e:'2026-04-30', d:'20'}), newRow({name:'図面作成', lv:'1', s:'2026-05-01', e:'2026-05-31', d:'31'}), newRow({name:'', lv:'2'})];
     renderTasks(); planUpdate();""", {'n_tasks': "'#planView > section'", 'n_preview': "'#planView .stage'"}),
   'report': ("setView('plan'); pickPlan('koutei'); sched.report.form = 'rep'; sched.report.month = '2026-06'; sched.report.actual['2026-05'] = '35'; setView('report');", {
-      'h_fields': "document.querySelector('#repView .plan-cols')", 'h_chart': "'#repView .stage'", 'h_tabs': "'.tabs'"}),
-  'report_g': ("setView('plan'); pickPlan('koutei'); sched.report.form = 'gyomu'; sched.report.month = '2026-06'; setView('report');", {
-      'h_items': "'#repItemsSec'"}),
+      'h_chart': "'#repView .stage'", 'h_tabs': "'.tabs'"}),
+  'report_g': ("setView('plan'); pickPlan('koutei'); sched.report.form = 'gyomu'; sched.report.month = '2026-06'; sched.report.actual['2026-05'] = '35'; sched.report.remarks = '6/15：第4回打合せ'; setView('report');", {
+      'h_items': "'#repItemsSec'", 'h_fields': "'#repView .rep-form'"}),
   'reflect': ("setView('flow'); pickSample('blank'); setView('plan'); pickPlan('koutei'); exportToFlow(); setView('flow');", {'r_paper': "'#paper'", 'r_bench': "'#flowView'"}),
 }
 W, HGT = 1280, 3000   # 位置を測るときと写すときは、同じ大きさの画面にする（図の大きさが画面の高さで変わるため）

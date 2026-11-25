@@ -212,13 +212,28 @@ table.reptbl { border-collapse: collapse; width: 100%; font-size: 13px; font-var
 table.reptbl th, table.reptbl td { border-bottom: 1px solid var(--rule); padding: 4px 8px; text-align: right; white-space: nowrap; }
 table.reptbl th { color: var(--muted); font-weight: 600; }
 table.reptbl th:first-child, table.reptbl td:first-child { text-align: left; }
-table.reptbl input { width: 6.5em; text-align: right; }
-table.reptbl td.mn input { width: 100%; min-width: 14em; text-align: left; }
-table.reptbl th.mn, table.reptbl td.mn { text-align: left; }
-table.reptbl tr.cur td { background: var(--accent-soft); font-weight: 700; }
-table.reptbl tr.after td { color: var(--muted); }
 table.reptbl .minus { color: var(--chg); }
 table.reptbl.items :is(td, th):is(:nth-child(2), :nth-child(3), :nth-child(6)) { text-align: left; }
+/* 報告の内容：提出する様式と同じ形の表 */
+.sheet-head .pick { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); }
+table.repform { border-collapse: collapse; width: 100%; min-width: 660px; font-size: 13px; font-variant-numeric: tabular-nums; }
+table.repform caption { padding: 4px 0 12px; font: 700 18px/1.3 var(--f-display); letter-spacing: .6em; text-indent: .6em; }
+table.repform col.c1 { width: 9.5em; } table.repform col.c2 { width: 11em; } table.repform col.c3 { width: 8.5em; }
+table.repform :is(th, td) { border: 1px solid var(--muted); padding: 5px 8px; vertical-align: middle; }
+table.repform th { font-weight: 600; text-align: center; }
+table.repform tr.hd td { white-space: nowrap; }
+table.repform tr.hd input[type="text"] { width: 100%; }
+table.repform tr.cols th { line-height: 1.35; }
+table.repform tr.cols small { display: block; font-size: 11px; font-weight: 400; color: var(--muted); }
+table.repform :is(tr[data-key], tr.start) td:first-child { text-align: right; white-space: nowrap; padding-right: 14px; }
+table.repform :is(tr[data-key], tr.start) td:is(:nth-child(2), :nth-child(3)) { text-align: center; white-space: nowrap; }
+table.repform td:nth-child(3) input { width: 5.5em; text-align: center; }
+table.repform td.mn input { width: 100%; }
+table.repform tr.cur td { background: var(--accent-soft); font-weight: 700; }
+table.repform tr.after td { color: var(--muted); }
+table.repform tr.ft label { display: block; margin-bottom: 4px; font-size: 12px; color: var(--muted); }
+table.repform tr.ft textarea { display: block; width: 100%; min-height: 4.6em; resize: vertical; font: 13px/1.5 var(--f-mono); }
+table.repform .note { margin-left: 12px; font-size: 12px; color: var(--muted); }
 table.reptbl.items tr.sub td:first-child { padding-left: 1.8em; font-weight: 400; }
 table.reptbl.items tr.top td:first-child { font-weight: 700; }
 .gpaper svg { display: block; width: 100%; height: auto; }
@@ -399,23 +414,14 @@ table.reptbl.items tr.top td:first-child { font-weight: 700; }
   </main>
 
   <main class="plan" id="repView" role="tabpanel" aria-labelledby="tabRep" hidden>
-    <div class="plan-cols">
-      <section class="sheet" aria-labelledby="hRep">
-        <div class="sheet-head"><h2 id="hRep">報告の内容</h2></div>
-        <p class="hint">工程表の作業と日付から、月末ごとの進捗率を日数の割合で計算します。計画は当初の日付、実績は「変更後」の日付（なければ当初の日付）で計算します。宛先・業務名・受注者は工程表の見出しを使います。</p>
-        <div class="fields" id="repFields"></div>
-      </section>
-      <section class="sheet" aria-labelledby="hRepTbl">
-        <div class="sheet-head"><h2 id="hRepTbl">月ごとの進捗率</h2></div>
-        <p class="hint">実績の値が計算とちがう月は、「実績」の欄に数字（%）を入れると置き換わります。空にすると計算の値に戻ります。</p>
-        <div class="rep-wrap">
-          <table class="reptbl">
-            <thead><tr><th>月（月末）</th><th>計画</th><th>実績</th><th>差</th><th class="mn">備考</th></tr></thead>
-            <tbody id="repRows"></tbody>
-          </table>
-        </div>
-      </section>
-    </div>
+    <section class="sheet rep-form" aria-labelledby="hRep">
+      <div class="sheet-head"><h2 id="hRep">報告の内容</h2>
+        <label class="pick">様式 <select id="r_form" data-r="form"><option value="rep">履行報告書</option><option value="gyomu">業務履行報告書（作業項目ごとの進捗も付ける）</option></select></label></div>
+      <p class="hint">保存する様式と同じ形の表です。予定工程（計画）は当初の日付、実施工程（実績）は「変更後」の日付（なければ当初の日付）で、月末ごとの進捗率を日数の割合で計算します。実施工程が計算とちがう月は、数字（%）を入れると置き換わります（空にすると計算の値に戻ります）。業務名は工程表の見出しと同じです。</p>
+      <div class="rep-wrap">
+        <table class="repform" id="repForm"></table>
+      </div>
+    </section>
     <section class="sheet" id="repItemsSec" aria-labelledby="hRepItems" hidden>
       <div class="sheet-head"><h2 id="hRepItems">作業項目ごとの進捗（業務履行報告書）</h2></div>
       <p class="hint">「報告する月」の月末時点の進捗です（月を選ばないときは前の月。工程表の期間が終わっていれば最後の月なので、すべて 100% になります）。各作業の期間のうち、経過した日数の割合で計算します（計画は当初の日付、実績は変更後の日付）。日付のない見出しは、その下の小項目をまとめた値です。</p>
@@ -4129,89 +4135,86 @@ function reportSvg(RM) {
 // グラフの横軸：最初の月と 1 月は年も付ける
 const chartLabel = (x, i) => (i === 0 || x.m === 1 ? `${eraOf(x.first)[1]}年${x.m}月` : `${x.m}月`);
 
-const REP_FIELDS = [
-  ["form", "様式", "select"],
-  ["month", "報告する月", "select", "最初は前の月（報告は翌月の初めに作るため）"],
-  ["date", "報告日", "date", "空なら、報告する月の末日"],
-  ["kStart", "工期（始め）", "date", "空なら、工程表の最初の日"],
-  ["kEnd", "工期（終わり）", "date", "空なら、工程表の最後の日"],
-  ["done", "今月の実施内容", "textarea", "空なら、工程表からこの文章を入れます"],
-  ["next", "来月の予定", "textarea", "空なら、工程表からこの文章を入れます"],
-  ["remarks", "備考（記事欄）", "textarea", ""],
-];
-const REP_ONLY = ["done", "next"];   // 履行報告書だけで使う欄（業務履行報告書は月ごとの備考を使う）
-function buildRepFields() {
-  $("repFields").innerHTML = REP_FIELDS.map(([k, label, type, note]) => {
-    const ctl = k === "form" ? `<select id="r_form" data-r="form"><option value="rep">履行報告書</option><option value="gyomu">業務履行報告書（作業項目ごとの進捗も付ける）</option></select>`
-      : type === "select" ? `<select id="r_${k}" data-r="${k}"></select>`
-      : type === "textarea" ? `<textarea id="r_${k}" data-r="${k}" rows="4"></textarea>`
-      : `<input id="r_${k}" type="${type}" data-r="${k}">`;
-    return `<label for="r_${k}" id="rl_${k}">${label}</label>${ctl}${note ? `<span class="note" id="rn_${k}">${esc(note)}</span>` : ""}`;
+// 画面の表：保存する様式と同じ形（業務名・工期・日付、月ごとの予定工程・実施工程・備考、記事欄）
+const repMonthLabel = (x, i, gyomu) => (!gyomu ? x.label : i === 0 || x.m === 1 ? `令和${eraOf(x.first)[1]}年 ${x.m}月` : `${x.m}月`);
+function repFormHtml(RM, gyomu) {
+  const rp = sched.report, k = RM.k;
+  const monthSel = `<select id="r_month" data-r="month" aria-label="報告する月">${RM.months.map((x, i) => `<option value="${x.key}"${i === k ? " selected" : ""}>${x.label}</option>`).join("")}</select>`;
+  const head = [
+    ["業務名", `<input id="r_project" type="text" data-h="project" value="${esc(sched.head.project || "")}" aria-label="業務名">`],
+    [gyomu ? "工期" : "履行期間", `<input id="r_kStart" type="date" data-r="kStart" value="${esc(rp.kStart)}" aria-label="工期の始め">　～　<input id="r_kEnd" type="date" data-r="kEnd" value="${esc(rp.kEnd)}" aria-label="工期の終わり"><span class="note" id="rn_kikan"></span>`],
+    ["日付", `<input id="r_date" type="date" data-r="date" value="${esc(rp.date)}" aria-label="日付">　（${monthSel} 分）<span class="note" id="rn_date"></span>`],
+  ].map(([a, b]) => `<tr class="hd"><th scope="row">${a}</th><td colspan="3">${b}</td></tr>`).join("");
+  const cols = gyomu ? ["月　　別", "予定工程　%<small>（　）は工程変更後</small>", "実施工程　%", "備　　考"] : ["月（月末）", "計画　%", "実績　%", "備　　考"];
+  // 予定工程：業務履行報告書は整数で、工程を変えた月は変更後を（　）に。履行報告書は小数 1 けた
+  const plan = x => (!gyomu ? pct1(x.plan) : RM.changed && pctInt(x.auto) !== pctInt(x.plan) ? `${pctInt(x.plan)}（${pctInt(x.auto)}）` : `${pctInt(x.plan)}`);
+  const start = gyomu ? "" : `<tr class="start"><td>${RM.start.label}</td><td>0.0</td><td>0.0</td><td class="mn">${jpDate(RM.start.day)}</td></tr>`;
+  const rows = RM.months.map((x, i) => {
+    const after = i > k;
+    const act = `<input type="text" inputmode="decimal" data-act="${x.key}" value="${esc(rp.actual[x.key] || "")}" placeholder="${after ? "" : gyomu ? pctInt(x.auto) : pct1(x.auto)}" aria-label="${x.label}の実施工程（%）"${after ? " disabled" : ""}>`;
+    const note = gyomu ? `<input type="text" data-mnote="${x.key}" value="${esc(rp.mnote[x.key] || "")}" placeholder="${after ? "" : esc(x.noteAuto)}" aria-label="${x.label}の備考"${after ? " disabled" : ""}>` : `<span class="auto"></span>`;
+    return `<tr data-key="${x.key}" class="${i === k ? "cur" : after ? "after" : ""}"><td>${repMonthLabel(x, i, gyomu)}</td><td>${plan(x)}</td><td>${act}</td><td class="mn">${note}</td></tr>`;
   }).join("");
+  const box = (key, label, ph = "") => `<tr class="ft"><td colspan="4"><label for="r_${key}">${label}</label><textarea id="r_${key}" data-r="${key}" rows="3"${ph ? ` placeholder="${esc(ph)}"` : ""}>${esc(rp[key])}</textarea></td></tr>`;
+  const foot = gyomu ? box("remarks", "（記事欄）")
+    : box("done", "今月の実施内容（空なら、工程表からこの文章を入れます）", RM.doneAuto) + box("next", "来月の予定（空なら、工程表からこの文章を入れます）", RM.nextAuto) + box("remarks", "備考");
+  return `<caption>${gyomu ? "業 務 履 行 報 告 書" : "履 行 報 告 書"}</caption><colgroup><col class="c1"><col class="c2"><col class="c3"><col></colgroup>`
+    + `<tbody>${head}<tr class="cols">${cols.map(t => `<th scope="col">${t}</th>`).join("")}</tr>${start}${rows}${foot}</tbody>`;
 }
 let repModel = null;
 function renderReport(full = true) {
-  const RM = repModel = reportModel(sched), rp = sched.report;
+  const RM = repModel = reportModel(sched), rp = sched.report, gyomu = rp_form(sched) === "gyomu";
+  $("r_form").value = gyomu ? "gyomu" : "rep";
   if (!RM.months.length) {
-    $("repRows").innerHTML = `<tr><td colspan="4" class="hint">工程表に、日付の入った作業がありません。先に工程表を作ってください。</td></tr>`;
+    $("repForm").innerHTML = `<tbody><tr><td class="hint">工程表に、日付の入った作業がありません。先に工程表を作ってください。</td></tr></tbody>`;
     $("rPaper").innerHTML = `<svg viewBox="0 0 600 120" xmlns="http://www.w3.org/2000/svg"><rect width="600" height="120" fill="#FFF"/><text x="300" y="66" text-anchor="middle" class="empty">工程表に日付を入れると、ここに進捗グラフができます</text></svg>`;
     $("rStats").textContent = "まだ進捗はありません";
-    $("r_month").innerHTML = "";
     $("repItemsSec").hidden = true;
     return;
   }
-  const diff = x => (x.act == null ? "" : `${x.act - x.plan >= 0 ? "+" : ""}${pct1(x.act - x.plan)}`);
-  if (full) {
-    $("r_month").innerHTML = RM.months.map((x, i) => `<option value="${x.key}"${i === RM.k ? " selected" : ""}>${x.label}</option>`).join("");
-    $("repRows").innerHTML = `<tr class="start"><td>${RM.start.label}（${md(RM.start.day)}）</td><td>0.0%</td><td>0.0 %</td><td class="d">+0.0</td><td class="mn"></td></tr>`
-      + RM.months.map((x, i) => `<tr data-key="${x.key}" class="${i === RM.k ? "cur" : i > RM.k ? "after" : ""}">`
-      + `<td>${x.label}</td><td>${pct1(x.plan)}%</td>`
-      + `<td><input type="text" inputmode="decimal" data-act="${x.key}" value="${esc(rp.actual[x.key] || "")}" placeholder="${i > RM.k ? "" : pct1(x.auto)}" aria-label="${x.label}の実績（%）"${i > RM.k ? " disabled" : ""}> %</td>`
-      + `<td class="d"></td><td class="mn"><input type="text" data-mnote="${x.key}" value="${esc(rp.mnote[x.key] || "")}" placeholder="${esc(x.noteAuto)}" aria-label="${x.label}の備考"></td></tr>`).join("");
-    REP_TEXT.filter(k => k !== "month" && k !== "form").forEach(k => { const el = $(`r_${k}`); if (el && document.activeElement !== el) el.value = rp[k]; });
-    $("r_form").value = rp.form === "gyomu" ? "gyomu" : "rep";
-  }
-  // 業務履行報告書：作業項目ごとの進捗、月ごとの備考。履行報告書だけの欄は隠す
-  const gyomu = rp.form === "gyomu";
+  if (full || !$("r_month")) $("repForm").innerHTML = repFormHtml(RM, gyomu);
+  // 空の欄に入る値、履行報告書の備考（今回報告・実績は入力値）
+  $("rn_kikan").textContent = !rp.kStart && !rp.kEnd ? `空なら工程表の日付（${jpDate(RM.S)}　～　${jpDate(RM.E)}）`
+    : !rp.kStart ? `始めが空なら ${jpDate(RM.S)}` : !rp.kEnd ? `終わりが空なら ${jpDate(RM.E)}` : "";
+  $("rn_date").textContent = rp.date ? "" : `空なら月末（${jpDate(RM.cur.last)}）`;
+  if (!gyomu) [...$("repForm").querySelectorAll("tr[data-key]")].forEach((tr, i) => {
+    const x = RM.months[i], el = tr.querySelector(".auto");
+    if (x && el) el.textContent = i === RM.k ? "今回報告" : x.manual && x.act != null ? "実績は入力値" : "";
+  });
+  // 業務履行報告書：作業項目ごとの進捗
   $("repItemsSec").hidden = !gyomu;
-  document.querySelectorAll("table.reptbl .mn").forEach(el => { el.hidden = !gyomu; });
-  REP_ONLY.forEach(k => ["r_", "rl_", "rn_"].forEach(pre => { const el = $(pre + k); if (el) el.hidden = gyomu; }));
   // 見出しに、どの月の末の進捗かを出す（報告する月を選ばないと前の月。期間が終わっていれば最後の月で、全部 100% になる）
   $("hRepItems").textContent = `作業項目ごとの進捗（${RM.cur.label}末現在）`;
   if (gyomu) $("repItems").innerHTML = RM.items.map(it => `<tr class="${it.depth === 2 ? "sub" : "top"}"><td>${esc(it.name)}</td><td>${esc(it.period)}</td><td>${esc(it.change)}</td>`
     + `<td>${pct1(it.plan)}%</td><td>${pct1(it.act)}%</td><td class="${/遅れ/.test(it.state) ? "minus" : ""}">${esc(it.state)}</td></tr>`).join("")
     || `<tr><td colspan="6" class="hint">日付の入った作業がありません。</td></tr>`;
-  [...$("repRows").querySelectorAll("tr[data-key]")].forEach((tr, i) => {
-    const x = RM.months[i], d = tr.querySelector("td.d");
-    if (!x || !d) return;
-    d.textContent = diff(x);
-    d.classList.toggle("minus", x.act != null && x.act < x.plan - 1e-9);
-  });
-  $("r_done").placeholder = RM.doneAuto;
-  $("r_next").placeholder = RM.nextAuto;
   $("rPaper").innerHTML = reportSvg(RM);
-  const c = RM.cur;
-  $("rStats").innerHTML = `${esc(c.label)}末　計画 <span class="n">${pct1(c.plan)}%</span>　実績 <span class="n">${pct1(c.act)}%</span>（差 ${esc(diff(c))}%）`;
+  const c = RM.cur, diff = `${c.act - c.plan >= 0 ? "+" : ""}${pct1(c.act - c.plan)}`;
+  $("rStats").innerHTML = `${esc(c.label)}末　計画 <span class="n">${pct1(c.plan)}%</span>　実績 <span class="n">${pct1(c.act)}%</span>（差 ${esc(diff)}%）`;
 }
-buildRepFields();
-$("repFields").addEventListener("input", e => {
-  const k = e.target.dataset.r;
-  if (!k) return;
-  sched.report[k] = e.target.value;
-  renderReport(k === "month" || k === "form");
+$("r_form").addEventListener("input", e => { sched.report.form = e.target.value; renderReport(); savePlan(); });
+$("r_form").addEventListener("change", () => commit());
+$("repForm").addEventListener("input", e => {
+  const el = e.target, d = el.dataset;
+  if (d.h) {
+    // 業務名は工程表の見出しと同じ
+    sched.head[d.h] = el.value;
+    const h = $(`h_${d.h}`);
+    if (h) h.value = el.value;
+  } else if (d.mnote) {
+    if (clean(el.value)) sched.report.mnote[d.mnote] = el.value; else delete sched.report.mnote[d.mnote];
+  } else if (d.act) {
+    if (clean(el.value)) sched.report.actual[d.act] = el.value; else delete sched.report.actual[d.act];
+    renderReport(false);
+  } else if (d.r) {
+    sched.report[d.r] = el.value;
+    // 報告する月を変えたら表を作り直す（選んだ欄はそのまま）
+    renderReport(d.r === "month");
+    if (d.r === "month") $("r_month").focus();
+  } else return;
   savePlan();
 });
-$("repFields").addEventListener("change", () => commit());
-$("repRows").addEventListener("input", e => {
-  const mk = e.target.dataset.mnote;
-  if (mk) { if (clean(e.target.value)) sched.report.mnote[mk] = e.target.value; else delete sched.report.mnote[mk]; savePlan(); return; }
-  const k = e.target.dataset.act;
-  if (!k) return;
-  if (clean(e.target.value)) sched.report.actual[k] = e.target.value; else delete sched.report.actual[k];
-  renderReport(false);
-  savePlan();
-});
-$("repRows").addEventListener("change", () => commit());
+$("repForm").addEventListener("change", () => commit());
 
 // ---------- 履行報告書の Excel（表と折れ線グラフ） ----------
 const rp_form = sc => (sc.report.form === "gyomu" ? "gyomu" : "rep");
