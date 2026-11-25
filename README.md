@@ -32,7 +32,7 @@ EXE は Windows 10・11 に入っている .NET Framework 4.8 と「Microsoft Ed
 - PowerPoint で保存、画像をコピー
 
 **工程表**
-- 作った工程表の Excel から読み込む（「作業項目・開始日・終了日」の表、または月の見出しと線・バーの工程表。このツールで保存した工程表、手で作った業務工程表、工程表自動作成ツール.xlsm の「入力」シート）
+- 作った工程表の Excel・PDF から読み込む（「作業項目・開始日・終了日」の表、または月の見出しと線・バーの工程表。このツールで保存した工程表、手で作った業務工程表、工程表自動作成ツール.xlsm の「入力」シート、それらを PDF にしたもの、業務履行報告書の PDF の業務工程表）
 - フローチャートの手順を取り込む。行ごとに「作業（黄色の箱）」「小項目」「枝分かれ（右）」「枝分かれ（左）」（名前は自由）を選べる
 - 開始日・終了日を入れると日数が自動で入る（暦日／土日祝除く、祝日は自動）
 - 「＋期間」で 2 回目・3 回目の期間、「実績」で計画とちがった日付（上段＝計画、下段＝実績の 2 段のバー）
@@ -69,7 +69,7 @@ EXE は Windows 10・11 に入っている .NET Framework 4.8 と「Microsoft Ed
 元は `web/app.html` です。
 
 ```
-python3 tools/build_web.py      # HTML 版（と EXE に入れる app/tool.html）を作り直す（python-pptx が必要）
+python3 tools/build_web.py      # HTML 版（と EXE に入れる app/tool.html）を作り直す（python-pptx が必要。PDF を読む pdf.js は tools/vendor/pdfjs から入る）
 python3 tools/build_app.py      # EXE と dist/FlowKouteiTool.zip を作る（dotnet が必要）
 python3 tools/make_shots.py     # 操作説明書の絵を docs/img/ に作る（Google Chrome が必要）
 python3 tools/build_manual.py   # 操作説明書 docs/…_操作説明書.docx を作る（python-docx が必要）

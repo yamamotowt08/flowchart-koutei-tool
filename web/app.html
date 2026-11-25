@@ -365,10 +365,10 @@ table.reptbl.items tr.top td:first-child { font-weight: 700; }
         <div class="actions">
           <button id="btnImport" class="btn" type="button" title="フローチャートの手順・小項目・照査・打合せを作業項目にします（入れた日付は残ります）">フローチャートの手順を取り込む</button>
           <button id="btnExport" class="btn" type="button" title="工程表の作業項目（1. は手順、1.1. は小項目）をフローチャートの手順に反映します">フローチャートに反映</button>
-          <input id="fileXlsx" type="file" accept=".xlsx,.xlsm,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel.sheet.macroEnabled.12" hidden>
-          <select id="planSample" aria-label="サンプル・Excel を入れる">
-            <option value="">サンプル・Excel を入れる…</option>
-            <option value="excel">Excel から読み込む…</option>
+          <input id="fileXlsx" type="file" accept=".xlsx,.xlsm,.pdf,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel.sheet.macroEnabled.12,application/pdf" hidden>
+          <select id="planSample" aria-label="サンプル・Excel・PDF を入れる">
+            <option value="">サンプル・Excel・PDF を入れる…</option>
+            <option value="excel">Excel・PDF から読み込む…</option>
             <option value="blank">白紙にする</option>
             <option value="koutei">詳細検討業務（Excel の例）</option>
           </select>
@@ -445,7 +445,7 @@ table.reptbl.items tr.top td:first-child { font-weight: 700; }
 </div>
 <dialog id="xlPick" class="pick-dlg" aria-labelledby="xlPickTitle">
   <h2 id="xlPickTitle">どのシートを読み込みますか？</h2>
-  <p class="hint">作業と日付が見つかったシートです。読み込むと、工程表の作業と日程が置き換わります（「元に戻す」で戻せます）。</p>
+  <p class="hint" id="xlPickNote"></p>
   <div class="pick-list" id="xlPickList"></div>
   <div class="pick-foot"><button type="button" class="btn" id="xlPickCancel">やめる</button></div>
 </dialog>
@@ -454,6 +454,7 @@ table.reptbl.items tr.top td:first-child { font-weight: 700; }
 <script>
 "use strict";
 const TEMPLATE = __PPTX_TEMPLATE__;
+const PDFJS = __PDFJS__;   // PDF を読む部品（pdf.js 3.11.174、tools/vendor/pdfjs。作り直しのときに入る）
 
 // ---------- 設定 ----------
 const SIZES = { w169: [960, 540], s43: [720, 540], a4p: [540, 780], a4l: [780, 540] };
@@ -4201,7 +4202,91 @@ function parseTableSheet(S, B) {
   return null;
 }
 
-// バーの形
+// バーの形（Excel・PDF 共通）
+// 月の見出しは左から順に 1 か月ずつ（見出しの書き間違いで 1 つ飛ぶのはよい）。「工期 7月～3月」のような行は見出しではない
+const monthsInOrder = hs => hs.every((h, i) => !i || [1, 2].includes((h.m - hs[i - 1].m + 12) % 12));
+// 年のない月の見出し：文字の中の日付（履行期間・工期など）のいちばん早い年月に合わせ、そこから前後へ数える
+function fillYears(blocks, texts) {
+  if (!blocks.some(b => !b.y)) return;
+  const ym = [];
+  texts.forEach(t => ym.push(...findYM(t)));
+  const base = ym.length ? ym.reduce((p, q) => (q[0] * 12 + q[1] < p[0] * 12 + p[1] ? q : p)) : ymdOf(Math.floor(Date.now() / DAY_MS + 0.375));
+  let i0 = blocks.findIndex(b => b.m === base[1]);
+  if (i0 < 0) { i0 = 0; blocks[0].y = blocks[0].y || (blocks[0].m <= base[1] ? base[0] : base[0] - 1); } else blocks[i0].y = blocks[i0].y || base[0];
+  for (let i = i0 + 1; i < blocks.length; i++) blocks[i].y = blocks[i].y || blocks[i - 1].y + (blocks[i].m <= blocks[i - 1].m ? 1 : 0);
+  for (let i = i0 - 1; i >= 0; i--) blocks[i].y = blocks[i].y || blocks[i + 1].y - (blocks[i].m >= blocks[i + 1].m ? 1 : 0);
+}
+// 月の範囲（l〜r）と、作業ごとの線（x1〜x2、高さ yc）・日にちの数字（l〜r）から、工程表の行を作る。
+// 位置の単位は何でもよい（Excel は列の番号、PDF はポイント）
+function buildBarRows({ blocks, tasks }) {
+  const ws = blocks.map(b => b.r - b.l).sort((p, q) => p - q), W = ws[Math.floor(ws.length / 2)] || 1;
+  // 位置 → 日付。月の中は上旬・中旬・下旬（境 t がなければ 3 等分）で、旬の中は日数で割る（終わりは「その日まで」）。
+  // 月の境のすぐ向こうまで引いた線は、その月の中とみなす
+  const dateAt = (x, end) => {
+    const tol = b => (b.r - b.l) * 0.015;
+    let i = blocks.findIndex(b => (end ? x <= b.r + tol(b) : x < b.r - tol(b)));
+    if (i < 0) i = blocks.length - 1;
+    const b = blocks[i], E = b.t ? [b.l, b.t[0], b.t[1], b.r] : [0, 1, 2, 3].map(k => b.l + ((b.r - b.l) * k) / 3);
+    const xx = Math.min(Math.max(x, b.l), b.r), j = end ? (xx <= E[1] ? 0 : xx <= E[2] ? 1 : 2) : xx < E[1] ? 0 : xx < E[2] ? 1 : 2;
+    const len = j < 2 ? 10 : daysInMonth(b.y, b.m) - 20;
+    return dayYMD(b.y, b.m, [1, 11, 21][j]) + Math.round(((xx - E[j]) / (E[j + 1] - E[j] || 1)) * len) - (end ? 1 : 0);
+  };
+  // 線の端のそばに書いた日にちの数字があれば、その日にそろえる（前後の月も見て、いちばん近い日）
+  const snap = (est, list, ok, within) => {
+    let best = null;
+    const [y, m] = ymdOf(est);
+    for (const q of list) {
+      if (q.used || !ok(q)) continue;
+      for (const dm of [-1, 0, 1]) {
+        const k = y * 12 + m - 1 + dm, yy = Math.floor(k / 12), mm = k % 12 + 1;
+        if (q.n > daysInMonth(yy, mm)) continue;
+        const cand = dayYMD(yy, mm, q.n), dist = Math.abs(cand - est);
+        if (dist <= within && (!best || dist < best.dist)) best = { q, cand, dist };
+      }
+    }
+    if (!best) return est;
+    best.q.used = true;
+    return best.cand;
+  };
+  const rows = [];
+  let periods = 0;
+  for (const t of tasks) {
+    const nums = t.nums.map(q => Object.assign({ used: false }, q)).sort((p, q) => p.l - q.l);
+    const per = b => {
+      const s = snap(dateAt(b.x1, false), nums, q => q.r >= b.x1 - W * 0.5 && q.r <= b.x1 + W * 0.2, 8);
+      const e = snap(dateAt(b.x2, true), nums, q => q.l >= b.x2 - W * 0.2 && q.l <= b.x2 + W * 0.5, 8);
+      return [s, Math.max(s, e)];
+    };
+    // 同じ所に重ねて描いた線は 1 本に
+    const bars = [];
+    for (const b of t.bars.slice().sort((p, q) => p.x1 - q.x1)) if (!bars.some(o => Math.abs(o.x1 - b.x1) < W * 0.02 && Math.abs(o.x2 - b.x2) < W * 0.02 && Math.abs(o.yc - b.yc) < 0.6)) bars.push(b);
+    // 上下 2 段なら、上＝計画、下＝実績
+    const ys = bars.map(b => b.yc);
+    let plan = bars, act = [];
+    if (bars.length && Math.max(...ys) - Math.min(...ys) > Math.max(1.2, t.h * 0.1)) {
+      const mid = (Math.max(...ys) + Math.min(...ys)) / 2;
+      plan = bars.filter(b => b.yc <= mid); act = bars.filter(b => b.yc > mid);
+    }
+    const P = plan.map(per), A = act.map(per);
+    // 線がなく数字だけの作業：左から 2 つずつ（始め・終わり）
+    if (!bars.length) for (let i = 0; i + 1 < nums.length; i += 2) {
+      const a = nums[i], b = nums[i + 1];
+      const s = snap(dateAt(a.r, false), [a], () => true, 12), e = snap(dateAt(b.l, true), [b], () => true, 12);
+      P.push([s, Math.max(s, e)]);
+    }
+    const lv = t.indent && !PLAN_NUM_RE.test(t.name) ? "2" : "";
+    if (!P.length) rows.push({ name: t.name, lv, note: t.note });
+    P.forEach((p, i) => {
+      const a = A[i], row = { name: i ? "" : t.name, lv: i ? "" : lv, s: isoOf(p[0]), e: isoOf(p[1]), note: i ? "" : t.note };
+      if (a && (a[0] !== p[0] || a[1] !== p[1])) { row.cs = isoOf(a[0]); row.ce = isoOf(a[1]); }
+      rows.push(row);
+    });
+    periods += P.length;
+  }
+  return { rows, periods };
+}
+
+// バーの形（Excel）
 const MONTH_HEAD_RE = /^(?:(令和|平成|R|H)?(\d{4}|\d{1,2}|元)年)?(\d{1,2})月$/;
 const NAME_HEAD_RE = /^(作業)?項目$|^工種|^月別|^名称$/;
 function parseBarSheet(S, B) {
@@ -4218,22 +4303,12 @@ function parseBarSheet(S, B) {
       const yy = m[2] ? (m[2].length === 4 ? +m[2] : ERA_BASE[m[1] || "令和"] + (m[2] === "元" ? 1 : +m[2])) : 0;
       hs.push({ a: c, m: +m[3], y: yy });
     }
-    if (hs.length >= 2) { mRow = r; heads = hs; }
+    if (hs.length >= 2 && monthsInOrder(hs)) { mRow = r; heads = hs; }
   }
   if (!mRow) return null;
   const gaps = heads.slice(1).map((h, i) => h.a - heads[i].a).sort((p, q) => p - q), W = Math.max(1, gaps[Math.floor(gaps.length / 2)] || 3);
   const blocks = heads.map((h, i) => Object.assign(h, { b: (heads[i + 1] ? heads[i + 1].a : h.a + W) - 1 }));
-  // 年のない月：シートの中の日付（履行期間・工期など）のいちばん早い年月に合わせ、そこから前後へ数える
-  if (blocks.some(b => !b.y)) {
-    const ym = [];
-    for (const v of S.cells.values()) if (typeof v === "string") ym.push(...findYM(v));
-    S.texts.forEach(t => ym.push(...findYM(t)));
-    const base = ym.length ? ym.reduce((p, q) => (q[0] * 12 + q[1] < p[0] * 12 + p[1] ? q : p)) : ymdOf(Math.floor(Date.now() / DAY_MS + 0.375));
-    let i0 = blocks.findIndex(b => b.m === base[1]);
-    if (i0 < 0) { i0 = 0; blocks[0].y = blocks[0].y || (blocks[0].m <= base[1] ? base[0] : base[0] - 1); } else blocks[i0].y = blocks[i0].y || base[0];
-    for (let i = i0 + 1; i < blocks.length; i++) blocks[i].y = blocks[i].y || blocks[i - 1].y + (blocks[i].m <= blocks[i - 1].m ? 1 : 0);
-    for (let i = i0 - 1; i >= 0; i--) blocks[i].y = blocks[i].y || blocks[i + 1].y - (blocks[i].m >= blocks[i + 1].m ? 1 : 0);
-  }
+  fillYears(blocks, [...[...S.cells.values()].filter(v => typeof v === "string"), ...S.texts]);
   const first = blocks[0].a, last = blocks[blocks.length - 1].b, near = [mRow - 3, mRow - 2, mRow - 1, mRow, mRow + 1, mRow + 2, mRow + 3];
   // 2. 作業項目の列（「項目」「工種」の見出し。なければ月より左で文字のいちばん多い列）と、摘要・備考の列
   let nameCol = 0, noteCol = 0;
@@ -4270,70 +4345,20 @@ function parseBarSheet(S, B) {
     const t = tasks.find(q => yc >= q.y1 && yc < q.y2);
     if (t && (s.line || h < (t.y2 - t.y1) * 0.9)) t.bars.push({ x1: Math.max(s.x1, xA), x2: Math.min(s.x2, xB), yc });
   }
-  // 位置 → 日付。月ごとに上旬・中旬・下旬が同じ幅で並んでいるとして数える（終わりは「その日まで」）
-  const dateAt = (px, end) => {
-    const P = S.colAt(px);
-    let i = blocks.findIndex(b => (end ? P <= b.b + 1 : P < b.b + 1)), f;
-    if (i < 0) { i = blocks.length - 1; f = 3; } else f = Math.max(0, ((P - blocks[i].a) / (blocks[i].b - blocks[i].a + 1)) * 3);
-    const b = blocks[i], j = Math.min(2, Math.floor(f)), len = j < 2 ? 10 : daysInMonth(b.y, b.m) - 20;
-    return dayYMD(b.y, b.m, [1, 11, 21][j]) + Math.round((f - j) * len) - (end ? 1 : 0);
-  };
-  // 線の端のそばに書いた日にちの数字があれば、その日にそろえる（前後の月も見て、いちばん近い日）
-  const snap = (est, list, ok, within) => {
-    let best = null;
-    const [y, m] = ymdOf(est);
-    for (const q of list) {
-      if (q.used || !ok(q.c)) continue;
-      for (const dm of [-1, 0, 1]) {
-        const k = y * 12 + m - 1 + dm, yy = Math.floor(k / 12), mm = k % 12 + 1;
-        if (q.n > daysInMonth(yy, mm)) continue;
-        const cand = dayYMD(yy, mm, q.n), dist = Math.abs(cand - est);
-        if (dist <= within && (!best || dist < best.dist)) best = { q, cand, dist };
+  // 作業ごとの線（列の番号の小数）・日にちの数字（月の範囲のセル）・摘要
+  const { rows, periods } = buildBarRows({
+    blocks: blocks.map(b => ({ l: b.a, r: b.b + 1, y: b.y, m: b.m })),
+    tasks: tasks.map(t => {
+      const nums = [];
+      for (let r = t.r; r <= t.r2; r++) for (let c = first; c <= last; c++) {
+        const v = S.cells.get(`${r},${c}`);
+        if (typeof v === "number" && Number.isInteger(v) && v >= 1 && v <= 31) nums.push({ l: c, r: c + 1, n: v });
       }
-    }
-    if (!best) return est;
-    best.q.used = true;
-    return best.cand;
-  };
-  const rows = [];
-  let periods = 0;
-  for (const t of tasks) {
-    const nums = [];
-    for (let r = t.r; r <= t.r2; r++) for (let c = first; c <= last; c++) {
-      const v = S.cells.get(`${r},${c}`);
-      if (typeof v === "number" && Number.isInteger(v) && v >= 1 && v <= 31) nums.push({ c, n: v, used: false });
-    }
-    nums.sort((p, q) => p.c - q.c);
-    const per = b => {
-      const c1 = Math.floor(S.colAt(b.x1)), c2 = Math.floor(S.colAt(b.x2 - 0.01));
-      const s = snap(dateAt(b.x1, false), nums, c => c >= c1 - 3 && c <= c1 + 1, 8), e = snap(dateAt(b.x2, true), nums, c => c >= c2 - 1 && c <= c2 + 3, 8);
-      return [s, Math.max(s, e)];
-    };
-    // 上下 2 段なら、上＝計画、下＝実績
-    const bars = t.bars.sort((p, q) => p.x1 - q.x1), ys = bars.map(b => b.yc);
-    let plan = bars, act = [];
-    if (bars.length && Math.max(...ys) - Math.min(...ys) > 2.5) {
-      const mid = (Math.max(...ys) + Math.min(...ys)) / 2;
-      plan = bars.filter(b => b.yc <= mid); act = bars.filter(b => b.yc > mid);
-    }
-    const P = plan.map(per), A = act.map(per);
-    // 線がなく数字だけの作業：左から 2 つずつ（始め・終わり）
-    if (!bars.length) for (let i = 0; i + 1 < nums.length; i += 2) {
-      const a = nums[i], b = nums[i + 1];
-      const s = snap(dateAt(S.colX(a.c + 1), false), [a], () => true, 12), e = snap(dateAt(S.colX(b.c), true), [b], () => true, 12);
-      P.push([s, Math.max(s, e)]);
-    }
-    let note = "";
-    if (noteCol) for (let r = t.r; r <= t.r2 && !note; r++) note = clean(T(r, noteCol).replace(/\r?\n/g, " "));
-    const lv = /^[\s　]/.test(t.raw) && !PLAN_NUM_RE.test(t.name) ? "2" : "";
-    if (!P.length) rows.push({ name: t.name, lv, note });
-    P.forEach((p, i) => {
-      const a = A[i], row = { name: i ? "" : t.name, lv: i ? "" : lv, s: isoOf(p[0]), e: isoOf(p[1]), note: i ? "" : note };
-      if (a && (a[0] !== p[0] || a[1] !== p[1])) { row.cs = isoOf(a[0]); row.ce = isoOf(a[1]); }
-      rows.push(row);
-    });
-    periods += P.length;
-  }
+      let note = "";
+      if (noteCol) for (let r = t.r; r <= t.r2 && !note; r++) note = clean(T(r, noteCol).replace(/\r?\n/g, " "));
+      return { name: t.name, indent: /^[\s　]/.test(t.raw), note, h: t.y2 - t.y1, nums, bars: t.bars.map(b => ({ x1: S.colAt(b.x1), x2: S.colAt(b.x2), yc: b.yc })) };
+    }),
+  });
   // 見出し：業務名と宛先（月の見出しより上）
   const head = {};
   for (let r = 1; r < mRow; r++) for (let c = 1; c <= S.maxC; c++) {
@@ -4344,10 +4369,186 @@ function parseBarSheet(S, B) {
   return { kind: "bar", rows, head, cfg: {}, periods };
 }
 
+// バーの形（PDF）：Excel などから PDF にした工程表（業務工程表、第２号様式の工程表）。紙をスキャンした PDF は読めない
+// PDF を読む部品 pdf.js は、ページの中に入れてあるものを使うときに読み込む（別のスレッドは使わず、このページの中で動かす）
+let pdfjsLoad = null;
+function loadPdfJs() {
+  if (!pdfjsLoad) pdfjsLoad = (async () => {
+    const add = src => new Promise((ok, ng) => {
+      const el = document.createElement("script");
+      el.src = URL.createObjectURL(new Blob([src], { type: "text/javascript" }));
+      el.onload = ok; el.onerror = ng;
+      document.head.appendChild(el);
+    });
+    await add(PDFJS.worker);   // pdfjsWorker（これがあると pdf.js はこのページの中で動く）
+    await add(PDFJS.lib);
+    return window.pdfjsLib;
+  })();
+  return pdfjsLoad;
+}
+// ページごとの文字（位置つき。同じ行で間のないものはつなぐ）と、線・塗りの図形（上が 0 のポイント）
+async function readPdfPages(buf) {
+  const lib = await loadPdfJs(), U = lib.Util, O = lib.OPS;
+  const doc = await lib.getDocument({ data: new Uint8Array(buf), isEvalSupported: false }).promise, pages = [];
+  for (let n = 1; n <= Math.min(doc.numPages, 200); n++) {
+    const page = await doc.getPage(n), vp = page.getViewport({ scale: 1 });
+    const raw = (await page.getTextContent()).items.filter(i => i.str && i.str.trim()).map(i => {
+      const t = U.transform(vp.transform, i.transform), h = i.height || Math.hypot(t[2], t[3]) || 1;
+      return { s: i.str, x1: t[4], x2: t[4] + i.width, y1: t[5] - h, y2: t[5] };
+    });
+    const lines = [], text = [];
+    for (const it of raw.sort((p, q) => p.y2 - q.y2)) {
+      const L = lines.find(l => Math.abs(l.y - it.y2) <= 1.5);
+      if (L) L.items.push(it); else lines.push({ y: it.y2, items: [it] });
+    }
+    for (const L of lines) {
+      L.items.sort((p, q) => p.x1 - q.x1);
+      let cur = null;
+      for (const it of L.items) {
+        if (cur && it.x1 - cur.x2 < (cur.y2 - cur.y1) * 0.35) { cur.s += it.s; cur.x2 = Math.max(cur.x2, it.x2); cur.y1 = Math.min(cur.y1, it.y1); }
+        else { cur = Object.assign({}, it); text.push(cur); L.parts = (L.parts || []).concat([cur]); }
+      }
+      L.str = L.items.map(i => i.s).join("");
+    }
+    // 図形：線（stroke）は 1 本ずつ、塗り（fill）は四角ごと（四角でなければ全体の外枠）
+    const ol = await page.getOperatorList(), prims = [], stack = [];
+    let ctm = vp.transform, lw = 1, path = [];
+    const PAINT = [O.stroke, O.closeStroke, O.fill, O.eoFill, O.fillStroke, O.eoFillStroke, O.closeFillStroke, O.closeEOFillStroke];
+    const boxOf = pts => ({ x1: Math.min(...pts.map(p => p[0])), x2: Math.max(...pts.map(p => p[0])), y1: Math.min(...pts.map(p => p[1])), y2: Math.max(...pts.map(p => p[1])) });
+    for (let i = 0; i < ol.fnArray.length; i++) {
+      const f = ol.fnArray[i], a = ol.argsArray[i];
+      if (f === O.save) stack.push([ctm, lw]);
+      else if (f === O.restore) { const st = stack.pop(); if (st) [ctm, lw] = st; }
+      else if (f === O.transform) ctm = U.transform(ctm, a);
+      else if (f === O.setLineWidth) lw = a[0];
+      else if (f === O.constructPath) {
+        const [ops, args] = a;
+        let k = 0, cur = null, start = null;
+        for (const op of ops) {
+          if (op === O.rectangle) {
+            const [x, y, w, h] = args.slice(k, k + 4); k += 4;
+            path.push({ rect: [[x, y], [x + w, y], [x + w, y + h], [x, y + h]].map(p => U.applyTransform(p, ctm)) });
+          } else if (op === O.moveTo) { cur = start = U.applyTransform([args[k], args[k + 1]], ctm); k += 2; }
+          else if (op === O.lineTo) { const q = U.applyTransform([args[k], args[k + 1]], ctm); k += 2; if (cur) path.push({ seg: [cur, q] }); cur = q; }
+          else if (op === O.curveTo) k += 6;
+          else if (op === O.curveTo2 || op === O.curveTo3) k += 4;
+          else if (op === O.closePath) { if (cur && start) path.push({ seg: [cur, start] }); cur = start; }
+        }
+      } else if (f === O.endPath) path = [];
+      else if (PAINT.includes(f)) {
+        if (f === O.stroke || f === O.closeStroke) {
+          const w = lw * Math.sqrt(Math.abs(ctm[0] * ctm[3] - ctm[1] * ctm[2]));
+          for (const p of path) {
+            const segs = p.seg ? [p.seg] : p.rect.map((q, j) => [q, p.rect[(j + 1) % 4]]);
+            for (const sg of segs) prims.push(Object.assign(boxOf(sg), { k: "s", lw: w }));
+          }
+        } else if (path.length && path.every(p => p.rect)) path.forEach(p => prims.push(Object.assign(boxOf(p.rect), { k: "f" })));
+        else if (path.length) prims.push(Object.assign(boxOf(path.flatMap(p => p.seg || p.rect)), { k: "f" }));
+        path = [];
+      }
+    }
+    pages.push({ n, text, lines, prims });
+  }
+  return pages;
+}
+function parsePdfPage(P) {
+  const T = P.text, yc = t => (t.y1 + t.y2) / 2;
+  // 1. 月の見出し：同じ行に月が 2 つ以上（いちばん多い行）
+  const groups = [];
+  for (const t of T) {
+    const m = MONTH_HEAD_RE.exec(toHalf(normLabel(t.s)));
+    if (!m || +m[3] < 1 || +m[3] > 12) continue;
+    const g = groups.find(g => Math.abs(g.y - yc(t)) <= 1.5), o = { cx: (t.x1 + t.x2) / 2, m: +m[3], y: m[2] ? (m[2].length === 4 ? +m[2] : ERA_BASE[m[1] || "令和"] + (m[2] === "元" ? 1 : +m[2])) : 0 };
+    if (g) g.items.push(o); else groups.push({ y: yc(t), items: [o] });
+  }
+  groups.forEach(g => g.items.sort((p, q) => p.cx - q.cx));
+  const G = groups.filter(g => g.items.length >= 2 && monthsInOrder(g.items)).sort((p, q) => q.items.length - p.items.length || p.y - q.y)[0];
+  if (!G) return null;
+  const hs = G.items;
+  // 月の境：となりの月の見出しとの真ん中（月によって幅がちがってもよい）。近くに縦の線があれば、そこにそろえる
+  const vx = P.prims.filter(p => p.x2 - p.x1 < 0.8 && p.y2 - p.y1 > 4 && p.y2 > G.y).map(p => (p.x1 + p.x2) / 2);
+  const edge = (x, w) => { let best = x, d = w * 0.1; for (const v of vx) if (Math.abs(v - x) < d) { d = Math.abs(v - x); best = v; } return best; };
+  const cs = hs.map(h => h.cx), n = cs.length;
+  const cuts = cs.map((c, i) => (i ? (c + cs[i - 1]) / 2 : c - (cs[1] - cs[0]) / 2)).concat([cs[n - 1] + (cs[n - 1] - cs[n - 2]) / 2]);
+  const ex = cuts.map((x, i) => edge(x, Math.min(i < n ? cuts[i + 1] - x : Infinity, i ? x - cuts[i - 1] : Infinity)));
+  const blocks = hs.map((h, i) => ({ l: ex[i], r: ex[i + 1], y: h.y, m: h.m }));
+  if (blocks.some(b => !(b.r > b.l))) return null;
+  blocks.forEach(b => { const w = b.r - b.l; b.t = [edge(b.l + w / 3, w / 3), edge(b.l + (w * 2) / 3, w / 3)]; });   // 上旬・中旬の終わり
+  fillYears(blocks, P.lines.map(l => l.str));
+  const xL = blocks[0].l, xR = blocks[blocks.length - 1].r, yTop = G.y;
+  // 2. 作業名の列：見出しの「単位」「数量」「日数」より左（なければ月より左）
+  let nameR = xL;
+  for (const t of T) if (Math.abs(yc(t) - yTop) < 15 && /^(単位|数量|日数)$/.test(normLabel(t.s))) nameR = Math.min(nameR, t.x1);
+  const below = t => yc(t) > yTop + 2;
+  const names = T.filter(t => below(t) && t.x2 <= nameR + 1 && !NAME_HEAD_RE.test(normLabel(t.s)) && !/^[上中下]$/.test(normLabel(t.s)));
+  if (!names.length) return null;
+  const nx = Math.min(...names.map(t => t.x1));
+  // 3. 作業の行：作業名の列を横切る横線（表の罫線）で区切る。罫線がなければ文字の行ごと
+  let ys = [];
+  for (const y of P.prims.filter(p => p.y2 - p.y1 < 1.5 && p.x1 <= nx + 1 && p.x2 >= nx + 6 && p.y1 > yTop).map(p => (p.y1 + p.y2) / 2).sort((a, b) => a - b)) if (!ys.length || y - ys[ys.length - 1] > 1) ys.push(y);
+  if (ys.length < 2) {
+    const ls = [...new Set(names.map(t => Math.round(yc(t))))].sort((a, b) => a - b);
+    ys = ls.map((y, i) => (i ? (y + ls[i - 1]) / 2 : y - 6)).concat([ls[ls.length - 1] + 6]);
+  }
+  const bands = [];
+  for (let i = 0; i + 1 < ys.length; i++) if (names.some(t => yc(t) >= ys[i] && yc(t) < ys[i + 1])) bands.push([ys[i], ys[i + 1]]);
+  const hm = bands.map(b => b[1] - b[0]).sort((p, q) => p - q)[Math.floor(bands.length / 2)] || 0;
+  const tasks = [];
+  for (const [y1, y2] of bands) {
+    if (y2 - y1 > hm * 2.5) break;   // 表の下のグラフなど
+    const its = names.filter(t => yc(t) >= y1 && yc(t) < y2).sort((p, q) => (Math.abs(p.y2 - q.y2) > 1.5 ? p.y2 - q.y2 : p.x1 - q.x1));
+    if (!its.length) continue;
+    const name = clean(its.map(t => t.s).join(""));
+    if (/^[（(]\s*注\s*[）)]/.test(name)) break;
+    if (NAME_HEAD_RE.test(normLabel(name))) continue;
+    tasks.push({ name, indent: its[0].x1 - nx > 2 || /^[\s　]/.test(its[0].s), y1, y2, h: y2 - y1, bars: [], nums: [], notes: [] });
+  }
+  if (!tasks.length) return null;
+  const taskAt = y => tasks.find(q => y >= q.y1 && y < q.y2);
+  // 4. 線・バー：月の範囲で、作業の行の中（罫線の上ではない）。太さのある横線か、行の高さの 6 割までの塗り
+  for (const p of P.prims) {
+    const w = p.x2 - p.x1, h = p.y2 - p.y1, y = (p.y1 + p.y2) / 2, t = taskAt(y);
+    if (!t || p.x2 <= xL || p.x1 >= xR || w < 0.8 || y < t.y1 + 0.8 || y > t.y2 - 0.8) continue;
+    if (p.k === "s" ? p.lw >= 0.4 && h <= 1.5 : h >= 0.5 && h <= t.h * 0.6) t.bars.push({ x1: Math.max(p.x1, xL), x2: Math.min(p.x2, xR), yc: y });
+  }
+  // 5. 日にちの数字（月の範囲）と、摘要・備考（月より右。さらに右に別の見出しがあれば、その前まで）
+  const W = (xR - xL) / blocks.length;
+  let noteR = xR + W * 3;
+  for (const t of T) if (Math.abs(yc(t) - yTop) < 15 && t.x1 > xR + 2 && !/摘|要|備|考/.test(t.s)) noteR = Math.min(noteR, t.x1 - 1);
+  for (const t of T) {
+    if (!below(t)) continue;
+    const q = taskAt(yc(t)), s = toHalf(normLabel(t.s));
+    if (!q) continue;
+    if (/^\d{1,2}$/.test(s) && +s >= 1 && +s <= 31 && t.x1 >= xL - 1 && t.x2 <= xR + 1) q.nums.push({ l: t.x1, r: t.x2, n: +s });
+    else if (t.x1 >= xR - 1 && t.x1 < noteR) q.notes.push(t);
+  }
+  tasks.forEach(t => { t.note = clean(t.notes.sort((p, q) => (Math.abs(p.y2 - q.y2) > 1.5 ? p.y2 - q.y2 : p.x1 - q.x1)).map(n => n.s).join("")); });
+  const { rows, periods } = buildBarRows({ blocks, tasks });
+  // 見出し：業務名（同じ行の「業務名」の右）と宛先（殿・様で終わる行）。月の見出しより上
+  const head = {};
+  for (const L of P.lines) {
+    if (L.y >= yTop || !L.parts) continue;
+    const sp = L.parts.map(p => p.s).join("　"), m = /^[\s　]*(?:委[\s　]*託[\s　]*)?業[\s　]*務[\s　]*名[\s　]*[：:]?[\s　]*(.+)$/.exec(sp), all = normLabel(L.str);
+    if (!head.project && m && clean(m[1])) head.project = clean(m[1]);
+    else if (!head.project && /^(委託)?業務名[：:]?$/.test(all)) {
+      // 値の文字の高さが少しちがって、別の行になったとき（真ん中の高さが近い、右の文字）
+      const lab = L.parts[L.parts.length - 1], c = yc(lab);
+      const rest = T.filter(t => t.x1 > lab.x2 && Math.abs(yc(t) - c) < 4).sort((p, q) => p.x1 - q.x1);
+      if (rest.length) head.project = clean(rest.map(t => t.s).join("　"));
+    }
+    if (!head.to && /[殿様]$/.test(all) && all.length > 2) head.to = clean(sp);
+  }
+  return { kind: "bar", rows, head, cfg: {}, periods };
+}
+// 「（7月分）」のような、何月分かの書き込み
+const monthTag = P => { const m = toHalf(P.lines.map(l => l.str).join(" ")).match(/[（(]\s*(\d{1,2})\s*月分\s*[）)]/); return m ? `（${+m[1]}月分）` : ""; };
+
 // シートを選ぶ（読めるシートが 2 つ以上あるとき）
-function pickSheet(found) {
+function pickSheet(found, what) {
   return new Promise(resolve => {
     const dlg = $("xlPick");
+    $("xlPickTitle").textContent = `どの${what}を読み込みますか？`;
+    $("xlPickNote").textContent = `作業と日付が見つかった${what}です。読み込むと、工程表の作業と日程が置き換わります（「元に戻す」で戻せます）。`;
     $("xlPickList").innerHTML = found.map((f, i) => `<button type="button" class="btn" data-i="${i}"><b>${esc(f.sheet)}</b>`
       + `<span>${f.kind === "table" ? "表" : "バー"}・${f.rows.filter(r => clean(r.name)).length} 作業・${f.periods} 期間${f.rows.some(r => r.cs || r.ce) ? "（実績あり）" : ""}</span></button>`).join("");
     const done = v => { dlg.close(); $("xlPickList").onclick = null; $("xlPickCancel").onclick = null; dlg.oncancel = null; resolve(v); };
@@ -4357,19 +4558,34 @@ function pickSheet(found) {
     dlg.showModal();
   });
 }
-async function importExcel(file) {
-  let B;
-  try { B = await readWorkbook(await file.arrayBuffer()); } catch (e) { toast("この Excel は読めません。.xlsx か .xlsm のファイルを選んでください（古い .xls は、Excel で .xlsx に保存し直してください）。"); return; }
-  const found = [];
-  for (const sh of B.sheets) {
-    if (!sh.part || sh.state === "veryHidden") continue;
-    try {
-      const S = await readSheet(B, sh), r = parseTableSheet(S, B) || parseBarSheet(S, B);
-      if (r && r.periods) found.push(Object.assign(r, { sheet: sh.name.trim() }));
-    } catch (e) { /* 読めないシートは飛ばす */ }
+async function importFile(file) {
+  let buf;
+  try { buf = await file.arrayBuffer(); } catch (e) { toast("ファイルを開けませんでした。"); return; }
+  const pdf = new TextDecoder().decode(new Uint8Array(buf, 0, Math.min(5, buf.byteLength))) === "%PDF-", found = [];
+  if (pdf) {
+    toast("PDF を読んでいます…");
+    let pages;
+    try { pages = await readPdfPages(buf); } catch (e) { toast("この PDF は読めません（パスワードの付いた PDF などは読めません）。"); return; }
+    pages.forEach((P, i) => {
+      try {
+        const r = parsePdfPage(P);
+        if (r && r.periods) found.push(Object.assign(r, { sheet: `${P.n} ページ${monthTag(P) || (i ? monthTag(pages[i - 1]) : "")}` }));
+      } catch (e) { /* 読めないページは飛ばす */ }
+    });
+    if (!found.length) { toast("PDF の中に、月の見出しと線・バーのある工程表が見つかりませんでした。紙をスキャンした PDF は読めません（Excel などから PDF にしたものは読めます）。"); return; }
+  } else {
+    let B;
+    try { B = await readWorkbook(buf); } catch (e) { toast("このファイルは読めません。Excel（.xlsx・.xlsm）か PDF を選んでください（古い .xls は、Excel で .xlsx に保存し直してください）。"); return; }
+    for (const sh of B.sheets) {
+      if (!sh.part || sh.state === "veryHidden") continue;
+      try {
+        const S = await readSheet(B, sh), r = parseTableSheet(S, B) || parseBarSheet(S, B);
+        if (r && r.periods) found.push(Object.assign(r, { sheet: sh.name.trim() }));
+      } catch (e) { /* 読めないシートは飛ばす */ }
+    }
+    if (!found.length) { toast("作業と日付が見つかりませんでした。「作業項目・開始日・終了日」の見出しがある表か、月の見出しと線・バーのある工程表を選んでください。"); return; }
   }
-  if (!found.length) { toast("作業と日付が見つかりませんでした。「作業項目・開始日・終了日」の見出しがある表か、月の見出しと線・バーのある工程表を選んでください。"); return; }
-  const pick = found.length === 1 ? found[0] : await pickSheet(found);
+  const pick = found.length === 1 ? found[0] : await pickSheet(found, pdf ? "ページ" : "シート");
   if (!pick) return;
   commit();
   sched.rows = pick.rows.map(r => newRow(r));
@@ -4388,7 +4604,7 @@ async function importExcel(file) {
 $("fileXlsx").addEventListener("change", e => {
   const f = e.target.files && e.target.files[0];
   e.target.value = "";
-  if (f) importExcel(f);
+  if (f) importFile(f);
 });
 
 function planBaseName() {

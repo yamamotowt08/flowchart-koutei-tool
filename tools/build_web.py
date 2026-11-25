@@ -1,7 +1,7 @@
 """フローチャート・工程表作成ツール.html を作る。
 
 web/app.html の __PPTX_TEMPLATE__ に、python-pptx の標準テンプレート
-（スライドマスター・レイアウト・テーマ）を埋め込む。
+（スライドマスター・レイアウト・テーマ）を、__PDFJS__ に PDF を読む部品 pdf.js（tools/vendor/pdfjs）を埋め込む。
 工程表の Excel（.xlsx）はテンプレートなしでページの中で組み立てる。
 
 使い方: python3 tools/build_web.py [アーティファクト用の出力先]
@@ -48,6 +48,13 @@ def main():
     data = data.replace('</', '<\\/')
     assert html.count('__PPTX_TEMPLATE__') == 1
     page = html.replace('__PPTX_TEMPLATE__', data)
+    # PDF を読む部品（pdf.js）。使うときにページの中で読み込む
+    V = os.path.join(ROOT, 'tools', 'vendor', 'pdfjs')
+    pdfjs = json.dumps({'lib': open(os.path.join(V, 'pdf.min.js'), encoding='utf-8').read(),
+                        'worker': open(os.path.join(V, 'pdf.worker.min.js'), encoding='utf-8').read()},
+                       ensure_ascii=False, separators=(',', ':')).replace('</', '<\\/')
+    assert page.count('__PDFJS__') == 1
+    page = page.replace('__PDFJS__', pdfjs)
 
     doc = ('<!doctype html>\n<html lang="ja">\n<head>\n<meta charset="utf-8">\n'
            '<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">\n'
