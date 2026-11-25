@@ -370,11 +370,11 @@ table.reptbl.items tr.top td:first-child { font-weight: 700; }
         <button id="btnExport2" class="linkbtn" type="button">工程表の作業をフローチャートに反映する</button>
         <button id="btnSyncIgnore" class="linkbtn" type="button">このままにする</button>
       </div>
-      <p class="hint">開始日・終了日・日数のうち 2 つ、または日数だけを入れます（日数だけのときは上の作業の翌日から）。日付が変わったときは「変更後」に入れると、変更前のバーの下に変更後のバーが付きます。「＋期間」で同じ作業に別の期間（2 回目の照査など）を足せます。</p>
+      <p class="hint">開始日・終了日・日数のうち 2 つ、または日数だけを入れます（日数だけのときは上の作業の翌日から）。実際の日付が計画とちがうときは「実績」に入れると、計画のバーの下に実績のバーが付きます。「＋期間」で同じ作業に別の期間（2 回目の照査など）を足せます。</p>
       <div class="tasks-wrap">
         <table class="tasks" id="tasks">
           <thead>
-            <tr><th colspan="2"></th><th colspan="3">変更前（当初の予定）</th><th colspan="3" class="chg">変更後（日付が変わったときだけ）</th><th colspan="4"></th></tr>
+            <tr><th colspan="2"></th><th colspan="3">計画</th><th colspan="3" class="chg">実績（計画とちがうときだけ）</th><th colspan="4"></th></tr>
             <tr><th></th><th>作業項目</th><th>開始日</th><th>終了日</th><th>日数</th><th class="chg">開始日</th><th class="chg">終了日</th><th class="chg">日数</th><th>バー色</th><th>備考</th><th>計算結果</th><th></th></tr>
           </thead>
           <tbody id="taskRows"></tbody>
@@ -410,17 +410,17 @@ table.reptbl.items tr.top td:first-child { font-weight: 700; }
     <section class="sheet rep-form" aria-labelledby="hRep">
       <div class="sheet-head"><h2 id="hRep">報告の内容</h2>
         <label class="pick">様式 <select id="r_form" data-r="form"><option value="rep">履行報告書</option><option value="gyomu">業務履行報告書（作業項目ごとの進捗も付ける）</option></select></label></div>
-      <p class="hint">保存する様式と同じ形の表です。予定工程（計画）は当初の日付、実施工程（実績）は「変更後」の日付（なければ当初の日付）で、月末ごとの進捗率を日数の割合で計算します。実施工程が計算とちがう月は、数字（%）を入れると置き換わります（空にすると計算の値に戻ります）。業務名は工程表の見出しと同じです。</p>
+      <p class="hint">保存する様式と同じ形の表です。予定工程は工程表の「計画」の日付、実施工程は「実績」の日付（なければ計画の日付）で、月末ごとの進捗率を日数の割合で計算します。実施工程が計算とちがう月は、数字（%）を入れると置き換わります（空にすると計算の値に戻ります）。業務名は工程表の見出しと同じです。</p>
       <div class="rep-wrap">
         <table class="repform" id="repForm"></table>
       </div>
     </section>
     <section class="sheet" id="repItemsSec" aria-labelledby="hRepItems" hidden>
       <div class="sheet-head"><h2 id="hRepItems">作業項目ごとの進捗（業務履行報告書）</h2></div>
-      <p class="hint">「報告する月」の月末時点の進捗です（月を選ばないときは前の月。工程表の期間が終わっていれば最後の月なので、すべて 100% になります）。各作業の期間のうち、経過した日数の割合で計算します（計画は当初の日付、実績は変更後の日付）。日付のない見出しは、その下の小項目をまとめた値です。</p>
+      <p class="hint">「報告する月」の月末時点の進捗です（月を選ばないときは前の月。工程表の期間が終わっていれば最後の月なので、すべて 100% になります）。各作業の期間のうち、経過した日数の割合で計算します（計画・実績は工程表のそれぞれの日付。実績がなければ計画の日付）。日付のない見出しは、その下の小項目をまとめた値です。</p>
       <div class="rep-wrap">
         <table class="reptbl items">
-          <thead><tr><th>作業項目</th><th>計画期間</th><th>変更後</th><th>計画</th><th>実績</th><th>状況</th></tr></thead>
+          <thead><tr><th>作業項目</th><th>計画期間</th><th>実績期間</th><th>計画</th><th>実績</th><th>状況</th></tr></thead>
           <tbody id="repItems"></tbody>
         </table>
       </div>
@@ -2708,7 +2708,7 @@ function normalizeSched(o) {
 }
 
 // Excel のサンプル（工程表自動作成ツール.xlsm の入力シートと同じ）
-// [作業項目, 開始日, 終了日, 日数, 変更後 開始日, 終了日, 日数, 備考]
+// [作業項目, 開始日, 終了日, 日数, 実績 開始日, 終了日, 日数, 備考]
 const PLAN_SAMPLE = {
   head: { project: "令和８年度　○○○○整備業務（その１）○○施設検討業務一式", date: "2026-02-26", address: "○○県○○市○○町１丁目２番３号",
           company: "株式会社○○○○", name: "代表取締役　○○　○○", manager: "部　長　○○　○○", staff: "係　長　○○　○○", contact: "０００－０００－００００" },
@@ -2777,7 +2777,7 @@ function computeSched(sc) {
     const fail = text => { if (!bad) errors.push({ row: i, text }); bad = true; return null; };
     const nm = clean(row.name);
     let s = dayOf(row.s), e = dayOf(row.e), d = readDays(row.d, "日数", fail);
-    let cs = dayOf(row.cs), ce = dayOf(row.ce), cd = readDays(row.cd, "変更後の日数", fail);
+    let cs = dayOf(row.cs), ce = dayOf(row.ce), cd = readDays(row.cd, "実績の日数", fail);
     const hasS = s != null, hasE = e != null, hasD = d != null, hasCS = cs != null, hasCE = ce != null, hasCD = cd != null;
     const hasOrig = hasS || hasE || hasD, hasChg = hasCS || hasCE || hasCD;
     let it = items[items.length - 1], rowColor;
@@ -2793,7 +2793,7 @@ function computeSched(sc) {
     }
     if (bad) { rowRes[i] = null; return; }
 
-    // 変更前（当初）の期間
+    // 計画の期間
     if (hasOrig) {
       if (hasS && hasE) { if (e < s) return fail("終了日が開始日より前になっています。"); }
       else if (hasS && hasD) e = addDays(s, d);
@@ -2806,18 +2806,18 @@ function computeSched(sc) {
       d = countDays(s, e);
       lastEnd = e;
     }
-    // 変更後の期間（足りないところは変更前から補う）
+    // 実績の期間（足りないところは計画から補う）
     if (hasChg) {
       if (hasCS && hasCE) { /* そのまま */ }
       else if (hasCS && hasCD) ce = addDays(cs, cd);
       else if (hasCE && hasCD) cs = subDays(ce, cd);
       else if (!hasOrig) {
-        if (hasCD) return fail("変更後の開始日か終了日を入れてください。");
+        if (hasCD) return fail("実績の開始日か終了日を入れてください。");
         if (hasCS) ce = cs; else cs = ce;
       } else if (hasCS) ce = addDays(cs, d < 1 ? 1 : d);   // 日数はそのままでずらす
       else if (hasCE) cs = s;                                // 開始日はそのまま
       else { cs = s; ce = addDays(cs, cd); }
-      if (ce < cs) return fail("変更後の終了日が開始日より前になっています。");
+      if (ce < cs) return fail("実績の終了日が開始日より前になっています。");
       cd = countDays(cs, ce);
     }
     if (!hasOrig && !hasChg) { rowRes[i] = null; return; }
@@ -2883,7 +2883,7 @@ function ganttModel(sc, R) {
     if (txt(k)) merge(7 + i, ca, 7 + i, last, S(label + txt(k)), { ha: "left" });
   });
   if (H.preface) put(13, 1, S(H.preface));
-  if (anyChg) merge(GR.LEGEND, spanStart(last, 50), GR.LEGEND, last, S("（上段：変更前　下段：変更後）"), { ha: "right", color: R.chgColor });
+  if (anyChg) merge(GR.LEGEND, spanStart(last, 50), GR.LEGEND, last, S("（上段：計画　下段：実績）"), { ha: "right", color: R.chgColor });
 
   // 業務名・開始・終了
   put(GR.PROJECT, GC.NAME, S("業務名"));
@@ -3253,7 +3253,7 @@ function renumberRows(rows) {
 }
 const NOTE_NAME_RE = NOTE_LINE_RE;
 function planItems() {
-  // 行ごとの期間（その行と「＋期間」の行をまとめた、いちばん早い日〜いちばん遅い日。変更後があればそちら）
+  // 行ごとの期間（その行と「＋期間」の行をまとめた、いちばん早い日〜いちばん遅い日。実績があればそちら）
   const res = computeSched(sched).rowRes, items = [];
   const grow = (per, x) => {
     if (!x) return per;
@@ -3642,7 +3642,7 @@ function rowHtml(r, i) {
     + `<td class="no" title="つかんで上下にドラッグすると、行を動かせます">${i + 1}</td>`
     + `<td class="name"><div class="nm">${pick}${inp("name", "text", ` placeholder="${cont ? "（上の作業の別の期間）" : lv === 2 ? "小項目" : "作業項目"}" aria-label="作業項目"`)}</div></td>`
     + `<td>${inp("s", "date", ' aria-label="開始日"')}</td><td>${inp("e", "date", ' aria-label="終了日"')}</td><td>${inp("d", "number", ' min="1" step="1" aria-label="日数"')}</td>`
-    + `<td class="chg">${inp("cs", "date", ' aria-label="変更後の開始日"')}</td><td class="chg">${inp("ce", "date", ' aria-label="変更後の終了日"')}</td><td class="chg">${inp("cd", "number", ' min="1" step="1" aria-label="変更後の日数"')}</td>`
+    + `<td class="chg">${inp("cs", "date", ' aria-label="実績の開始日"')}</td><td class="chg">${inp("ce", "date", ' aria-label="実績の終了日"')}</td><td class="chg">${inp("cd", "number", ' min="1" step="1" aria-label="実績の日数"')}</td>`
     + `<td><select data-k="color" class="swatch" aria-label="バー色">${colorOptions(r.color)}</select></td>`
     + `<td>${inp("note", "text", ' aria-label="備考"')}</td>`
     + `<td class="res"></td>`
@@ -3712,11 +3712,11 @@ function buildFields() {
     + `<span class="note">作業ごとの色は、表の「バー色」で変えられます</span>`
     + `<label for="c_barHeight">バーの太さ（%）</label><input id="c_barHeight" type="number" min="10" max="90" step="5" data-c="barHeight">`
     + `<span class="note">行の高さに対する割合（10〜90）</span>`
-    + `<label for="c_chgColor">変更後バーの色</label><input id="c_chgColor" type="color" data-c="chgColor">`
+    + `<label for="c_chgColor">実績バーの色</label><input id="c_chgColor" type="color" data-c="chgColor">`
     + `<label for="c_overlap">期間が重なる作業</label><select id="c_overlap" data-c="overlap"><option value="side">並行（左）に分ける</option><option value="none">分けない</option></select>`
     + `<span class="note">フローチャートに反映するとき、すぐ上の作業と期間が重なる作業を左に枝分かれさせる</span>`
-    + `<label for="c_oldStyle">変更前バーの表示</label><select id="c_oldStyle" data-c="oldStyle"><option value="fill">塗りつぶし</option><option value="dash">点線</option><option value="outline">白抜き</option></select>`
-    + `<span class="note">変更があった作業の、上段（変更前）のバーの描き方</span>`
+    + `<label for="c_oldStyle">計画バーの表示</label><select id="c_oldStyle" data-c="oldStyle"><option value="fill">塗りつぶし</option><option value="dash">点線</option><option value="outline">白抜き</option></select>`
+    + `<span class="note">実績を入れた作業の、上段（計画）のバーの描き方</span>`
     + `<label for="c_extraOff">ほかの休み</label><textarea id="c_extraOff" data-c="extraOff" placeholder="2026/12/29〜2027/1/3&#10;2026/8/13"></textarea>`
     + `<span class="note">「土日祝除く」のときに休みとして数えない日。祝日は自動で入ります</span>`
     + `<span class="note holidays" id="holList"></span>`;
@@ -3782,7 +3782,7 @@ function refreshRows() {
   });
 }
 
-// 開始日・終了日・日数のうち 2 つがそろったら、残りを計算して入れる（変更後も同じ）。
+// 開始日・終了日・日数のうち 2 つがそろったら、残りを計算して入れる（実績も同じ）。
 // 日数を直したら終了日、終了日を直したら日数、開始日を直したら日数はそのままで終了日をずらす
 function autoFill(i, k) {
   const r = sched.rows[i], t = dayTools(sched);
@@ -4000,13 +4000,13 @@ $("btnXlsx").addEventListener("click", () => (view === "report" ? saveReport() :
 // ====================================================================
 // 履行報告書（Excel で保存）
 // 工程表の作業と日付から、月末ごとの進捗率を日数の割合で出す。
-// 計画＝当初の日付、実績＝変更後の日付（なければ当初）。実績は月ごとに手で置き換えられる
+// 計画＝計画の日付、実績＝実績の日付（なければ計画）。実績の％は月ごとに手で置き換えられる
 // ====================================================================
 const pct1 = v => (v == null ? "" : (Math.round(v * 1000) / 10).toFixed(1));
 const monthLabel = (y, m) => { const [g, e] = eraOf(dayYMD(y, m, 1)); return `${g}${e}年${m}月`; };
 function reportModel(sc) {
   const R = computeSched(sc), t = dayTools(sc), rp = sc.report;
-  // 期間ごとに、計画（当初の日付）と実績（変更後の日付。なければ当初）、重み＝計画の日数
+  // 期間ごとに、計画の日付と実績の日付（なければ計画）、重み＝計画の日数
   const per = R.pers.map(p => {
     const ps = p.hasOrig ? p.s : p.cs, pe = p.hasOrig ? p.e : p.ce;
     return { item: p.item, ps, pe, as: p.hasChg ? p.cs : p.s, ae: p.hasChg ? p.ce : p.e, w: t.countDays(ps, pe) };
@@ -4139,7 +4139,7 @@ function repFormHtml(RM, gyomu) {
     ["日付", `<input id="r_date" type="date" data-r="date" value="${esc(rp.date)}" aria-label="日付">　（${monthSel} 分）<span class="note" id="rn_date"></span>`],
   ].map(([a, b]) => `<tr class="hd"><th scope="row">${a}</th><td colspan="3">${b}</td></tr>`).join("");
   const cols = gyomu ? ["月　　別", "予定工程　%<small>（　）は工程変更後</small>", "実施工程　%", "備　　考"] : ["月（月末）", "計画　%", "実績　%", "備　　考"];
-  // 予定工程：業務履行報告書は整数で、工程を変えた月は変更後を（　）に。履行報告書は小数 1 けた
+  // 予定工程：業務履行報告書は整数で、実績の日付で計算した値がちがう月は（　）に（様式の「工程変更後」）。履行報告書は小数 1 けた
   const plan = x => (!gyomu ? pct1(x.plan) : RM.changed && pctInt(x.auto) !== pctInt(x.plan) ? `${pctInt(x.plan)}（${pctInt(x.auto)}）` : `${pctInt(x.plan)}`);
   const start = gyomu ? "" : `<tr class="start"><td>${RM.start.label}</td><td>0.0</td><td>0.0</td><td class="mn">${jpDate(RM.start.day)}</td></tr>`;
   const rows = RM.months.map((x, i) => {
@@ -4272,7 +4272,7 @@ function reportXlsxParts(RM, sc) {
     const whole = (RM.items.length + 2) * 18 <= 680;
     blocks.push([r, whole ? r + 1 + RM.items.length : r + 2]);
     put(r, 1, secTitle(`作業項目ごとの進捗（${c.label}末現在）`), { b: true }); merge(r, 1, r, LAST); r++;
-    [["作業項目", 1], ["計画期間", 4], ["変更後", 5], ["計画", 6], ["実績", 7], ["状況", 8]].forEach(([t, col]) => put(r, col, t, { ha: "center", b: true }));
+    [["作業項目", 1], ["計画期間", 4], ["実績期間", 5], ["計画", 6], ["実績", 7], ["状況", 8]].forEach(([t, col]) => put(r, col, t, { ha: "center", b: true }));
     merge(r, 1, r, 3); frame(r, 1, r, LAST); r++;
     RM.items.forEach((it, i) => {
       if (i && !whole) blocks.push([r, r]);
