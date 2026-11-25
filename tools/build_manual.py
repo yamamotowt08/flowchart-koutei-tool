@@ -184,7 +184,7 @@ for _ in range(3): doc.add_paragraph()
 para('フローチャート・工程表作成ツール', 24, True, ACCENT, WD_ALIGN_PARAGRAPH.CENTER, 8)
 para('操作説明書', 22, True, None, WD_ALIGN_PARAGRAPH.CENTER, 36)
 img('f_paper', 4.6)
-para('バージョン 1.6.0', 10.5, None, None, WD_ALIGN_PARAGRAPH.CENTER, 18)
+para('バージョン 1.6.1', 10.5, None, None, WD_ALIGN_PARAGRAPH.CENTER, 18)
 p = doc.add_paragraph(); p.alignment = WD_ALIGN_PARAGRAPH.LEFT
 for i, t in enumerate(['概要', '動作環境と起動', '画面構成', 'フローチャートの作成', '図の編集', 'PowerPoint への出力',
                        '工程表の作成', 'Excel への出力', '工程表からフローチャートへの反映', '履行報告書・業務履行報告書の作成', '入力の保存と読み込み', 'よくある質問']):
@@ -380,6 +380,7 @@ bullets([
     '**計画**：工程表の当初の日付で計算します。',
     '**実績**：「変更後」の日付がある作業はその日付、ない作業は当初の日付で経過の割合を計算します（重みは計画の日数のまま）。予定どおりに進んだ月は計画と同じ値になり、遅れた分だけ実績が下がります。報告する月までを表示します。',
     '実際の進捗が計算と異なる月は、表の「実績」欄に数値（%）を入力すると置き換わります。空欄に戻すと計算値に戻ります。',
+    '表とグラフは、着手時（工期の始め。空欄の場合は工程表の最初の日）の 0% から始まります。',
 ])
 img('h_chart', 15, '進捗グラフ（黒：計画、赤：実績）')
 h2('保存される Excel')

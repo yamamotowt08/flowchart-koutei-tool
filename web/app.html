@@ -4081,14 +4081,17 @@ function reportModel(sc) {
   });
   const changed = R.pers.some(p => p.hasChg);
   const kS = dayOf(rp.kStart) ?? S, kE = dayOf(rp.kEnd) ?? E;
-  return { R, months, k, cur, S, E, kS, kE, date: dayOf(rp.date) ?? cur.last, doneAuto, nextAuto, items, gantt, changed };
+  // 着手の時点（計画・実績とも 0%）。表もグラフもここから始める
+  const start = { day: Math.min(kS, S), label: "着手時", plan: 0, act: 0 };
+  return { R, months, k, cur, S, E, kS, kE, start, date: dayOf(rp.date) ?? cur.last, doneAuto, nextAuto, items, gantt, changed };
 }
 
 // 折れ線グラフ（画面の確認用。Excel では Excel のグラフにする）
 function reportSvg(RM) {
   const W = 760, Hh = 330, L = 56, Rr = 20, T = 34, B = 64;
-  const n = RM.months.length, pw = W - L - Rr, ph = Hh - T - B;
-  const X = i => L + (n === 1 ? pw / 2 : (pw * i) / (n - 1)), Y = v => T + ph * (1 - v);
+  // 最初の点は着手時（0%）。月は 1 つ右から
+  const pts = [RM.start].concat(RM.months), n = pts.length, pw = W - L - Rr, ph = Hh - T - B;
+  const X = i => L + (pw * i) / (n - 1), Y = v => T + ph * (1 - v);
   const out = [`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${Hh}" font-family='"BIZ UDPGothic", "Meiryo UI", sans-serif'>`, `<rect width="${W}" height="${Hh}" fill="#FFFFFF"/>`];
   out.push(`<text x="${W / 2}" y="20" text-anchor="middle" font-size="14" font-weight="700" fill="#000">進捗状況（計画・実績）</text>`);
   for (let v = 0; v <= 1.0001; v += 0.2) {
@@ -4097,15 +4100,15 @@ function reportSvg(RM) {
   }
   out.push(`<line x1="${L}" y1="${T + ph}" x2="${W - Rr}" y2="${T + ph}" stroke="#808080"/><line x1="${L}" y1="${T}" x2="${L}" y2="${T + ph}" stroke="#808080"/>`);
   const step = Math.max(1, Math.ceil(n / 12));
+  out.push(`<text x="${L}" y="${T + ph + 16}" text-anchor="middle" font-size="11" fill="#404040">着手</text>`);
   RM.months.forEach((x, i) => {
-    if (i % step && i !== RM.k) return;
-    out.push(`<text x="${f1(X(i))}" y="${T + ph + 16}" text-anchor="middle" font-size="11" fill="${i === RM.k ? "#C00000" : "#404040"}">${esc(chartLabel(x, i))}</text>`);
+    if ((i + 1) % step && i !== RM.k) return;
+    out.push(`<text x="${f1(X(i + 1))}" y="${T + ph + 16}" text-anchor="middle" font-size="11" fill="${i === RM.k ? "#C00000" : "#404040"}">${esc(chartLabel(x, i))}</text>`);
   });
   const line = (key, color) => {
-    const pts = RM.months.map((x, i) => (x[key] == null ? null : [X(i), Y(x[key])])).filter(Boolean);
-    if (!pts.length) return;
-    out.push(`<polyline points="${pts.map(p => p.map(f1).join(",")).join(" ")}" fill="none" stroke="${color}" stroke-width="2.25" stroke-linejoin="round"/>`);
-    pts.forEach(p => out.push(`<circle cx="${f1(p[0])}" cy="${f1(p[1])}" r="3.5" fill="${color}"/>`));
+    const xy = pts.map((x, i) => (x[key] == null ? null : [X(i), Y(x[key])])).filter(Boolean);
+    out.push(`<polyline points="${xy.map(p => p.map(f1).join(",")).join(" ")}" fill="none" stroke="${color}" stroke-width="2.25" stroke-linejoin="round"/>`);
+    xy.forEach(p => out.push(`<circle cx="${f1(p[0])}" cy="${f1(p[1])}" r="3.5" fill="${color}"/>`));
   };
   line("plan", "#000000");
   line("act", "#C00000");
@@ -4152,7 +4155,8 @@ function renderReport(full = true) {
   const diff = x => (x.act == null ? "" : `${x.act - x.plan >= 0 ? "+" : ""}${pct1(x.act - x.plan)}`);
   if (full) {
     $("r_month").innerHTML = RM.months.map((x, i) => `<option value="${x.key}"${i === RM.k ? " selected" : ""}>${x.label}</option>`).join("");
-    $("repRows").innerHTML = RM.months.map((x, i) => `<tr data-key="${x.key}" class="${i === RM.k ? "cur" : i > RM.k ? "after" : ""}">`
+    $("repRows").innerHTML = `<tr class="start"><td>${RM.start.label}（${md(RM.start.day)}）</td><td>0.0%</td><td>0.0 %</td><td class="d">+0.0</td><td class="mn"></td></tr>`
+      + RM.months.map((x, i) => `<tr data-key="${x.key}" class="${i === RM.k ? "cur" : i > RM.k ? "after" : ""}">`
       + `<td>${x.label}</td><td>${pct1(x.plan)}%</td>`
       + `<td><input type="text" inputmode="decimal" data-act="${x.key}" value="${esc(rp.actual[x.key] || "")}" placeholder="${i > RM.k ? "" : pct1(x.auto)}" aria-label="${x.label}の実績（%）"${i > RM.k ? " disabled" : ""}> %</td>`
       + `<td class="d"></td><td class="mn"><input type="text" data-mnote="${x.key}" value="${esc(rp.mnote[x.key] || "")}" placeholder="${esc(x.noteAuto)}" aria-label="${x.label}の備考"></td></tr>`).join("");
@@ -4241,6 +4245,11 @@ function reportXlsxParts(RM, sc) {
   ["月（月末）", "計画", "実績", "差", "備考"].forEach((t, j) => put(r, j + 1, t, { ha: "center", va: "center", b: true }));
   merge(r, 5, r, LAST); frame(r, 1, r, LAST); r++;
   const first = r;
+  // 着手時（計画・実績とも 0%）。グラフもここから始まる
+  put(r, 1, RM.start.label, { ha: "center" });
+  put(r, 2, 0, { t: "pct", ha: "right" }); put(r, 3, 0, { t: "pct", ha: "right", color: "C00000" }); put(r, 4, 0, { t: "diff", ha: "right" });
+  put(r, 5, jpDate(RM.start.day), { ha: "center" });
+  merge(r, 5, r, LAST); frame(r, 1, r, LAST); r++;
   months.forEach((x, i) => {
     put(r, 1, x.label, { ha: "center" });
     put(r, 2, x.plan, { t: "pct", ha: "right" });
@@ -4331,11 +4340,11 @@ function reportXlsxParts(RM, sc) {
   const cols = widths.map((w, j) => `<col min="${j + 1}" max="${j + 1}" width="${colWidth(w).w}" customWidth="1"/>`).join("");
   const mergeXml = merges.map(m => `<mergeCell ref="${colName(m[1])}${m[0]}:${colName(m[3])}${m[2]}"/>`).join("");
 
-  // グラフ：黒＝計画、赤＝実績（報告する月まで）。値は表のセルを参照する
-  const q = `'${SHEET}'`, n = months.length;
+  // グラフ：黒＝計画、赤＝実績（報告する月まで）。値は表のセルを参照する（最初の行は着手時の 0%）
+  const q = `'${SHEET}'`, n = months.length + 1;
   const ref = col => `${q}!$${col}$${first}:$${col}$${lastM}`;
   const cache = vals => `<c:numCache><c:formatCode>0.0%</c:formatCode><c:ptCount val="${n}"/>${vals.map((v, i) => (v == null ? "" : `<c:pt idx="${i}"><c:v>${Math.round(v * 100000) / 100000}</c:v></c:pt>`)).join("")}</c:numCache>`;
-  const cats = `<c:cat><c:strRef><c:f>${ref("A")}</c:f><c:strCache><c:ptCount val="${n}"/>${months.map((x, i) => `<c:pt idx="${i}"><c:v>${xesc(x.label)}</c:v></c:pt>`).join("")}</c:strCache></c:strRef></c:cat>`;
+  const cats = `<c:cat><c:strRef><c:f>${ref("A")}</c:f><c:strCache><c:ptCount val="${n}"/>${[RM.start.label].concat(months.map(x => x.label)).map((t, i) => `<c:pt idx="${i}"><c:v>${xesc(t)}</c:v></c:pt>`).join("")}</c:strCache></c:strRef></c:cat>`;
   const ser = (i, name, col, color, vals) => `<c:ser><c:idx val="${i}"/><c:order val="${i}"/><c:tx><c:v>${name}</c:v></c:tx>`
     + `<c:spPr><a:ln w="28575" cap="rnd"><a:solidFill><a:srgbClr val="${color}"/></a:solidFill><a:round/></a:ln></c:spPr>`
     + `<c:marker><c:symbol val="circle"/><c:size val="5"/><c:spPr><a:solidFill><a:srgbClr val="${color}"/></a:solidFill><a:ln w="9525"><a:solidFill><a:srgbClr val="${color}"/></a:solidFill></a:ln></c:spPr></c:marker>`
@@ -4346,8 +4355,8 @@ function reportXlsxParts(RM, sc) {
     + `<c:lang val="ja-JP"/><c:roundedCorners val="0"/><c:chart>`
     + `<c:title><c:tx><c:rich><a:bodyPr/><a:lstStyle/><a:p><a:pPr><a:defRPr sz="1200" b="1"/></a:pPr><a:r><a:rPr lang="ja-JP" sz="1200" b="1"><a:latin typeface="ＭＳ 明朝"/><a:ea typeface="ＭＳ 明朝"/></a:rPr><a:t>進捗状況（計画・実績）</a:t></a:r></a:p></c:rich></c:tx><c:overlay val="0"/></c:title>`
     + `<c:autoTitleDeleted val="0"/><c:plotArea><c:layout/><c:lineChart><c:grouping val="standard"/><c:varyColors val="0"/>`
-    + ser(0, "計画", "B", "000000", months.map(x => x.plan))
-    + ser(1, "実績", "C", "C00000", months.map(x => x.act))
+    + ser(0, "計画", "B", "000000", [0].concat(months.map(x => x.plan)))
+    + ser(1, "実績", "C", "C00000", [0].concat(months.map(x => x.act)))
     + `<c:marker val="1"/><c:axId val="50010001"/><c:axId val="50010002"/></c:lineChart>`
     + `<c:catAx><c:axId val="50010001"/><c:scaling><c:orientation val="minMax"/></c:scaling><c:delete val="0"/><c:axPos val="b"/><c:numFmt formatCode="General" sourceLinked="0"/><c:majorTickMark val="out"/><c:minorTickMark val="none"/><c:tickLblPos val="low"/>${gray}${txt(900)}<c:crossAx val="50010002"/><c:crosses val="autoZero"/><c:auto val="1"/><c:lblAlgn val="ctr"/><c:lblOffset val="100"/><c:noMultiLvlLbl val="0"/></c:catAx>`
     + `<c:valAx><c:axId val="50010002"/><c:scaling><c:orientation val="minMax"/><c:max val="1"/><c:min val="0"/></c:scaling><c:delete val="0"/><c:axPos val="l"/><c:majorGridlines><c:spPr><a:ln w="9525"><a:solidFill><a:srgbClr val="D9D9D9"/></a:solidFill></a:ln></c:spPr></c:majorGridlines><c:numFmt formatCode="0%" sourceLinked="0"/><c:majorTickMark val="out"/><c:minorTickMark val="none"/><c:tickLblPos val="nextTo"/>${gray}${txt(900)}<c:crossAx val="50010001"/><c:crosses val="autoZero"/><c:crossBetween val="midCat"/><c:majorUnit val="0.2"/></c:valAx>`
