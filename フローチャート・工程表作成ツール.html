@@ -126,7 +126,11 @@ textarea#src { display: block; width: 100%; height: 360px; resize: vertical; bor
 .linepop button { border: 1px solid var(--rule); background: var(--panel); border-radius: 5px; padding: 3px 10px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
 .linepop button svg { width: 22px; height: 6px; }
 .linepop button svg line { stroke: currentColor; stroke-width: 2; }
-.boxpop { gap: 3px; flex-wrap: wrap; max-width: 470px; }
+.boxpop { flex-direction: column; align-items: stretch; gap: 4px; max-width: 480px; }
+.boxpop .row { display: flex; align-items: center; gap: 3px; flex-wrap: wrap; }
+.boxpop .lbl { min-width: 2.6em; }
+.boxpop button.tc { width: 24px; height: 24px; padding: 0; justify-content: center; font-weight: 800; font-size: 14px; }
+.boxpop button.tc.on { background: var(--panel); }   /* 選んだ文字の色が読めるように、地は明るいまま */
 .boxpop button.sw { width: 22px; height: 22px; padding: 0; border-radius: 4px; border-color: #A6A6A6; }
 .boxpop button.on { outline: 2px solid var(--accent); outline-offset: 1px; }
 .linepop button[data-del] { color: var(--warn); }
@@ -364,14 +368,16 @@ table.reptbl.items tr.top td:first-child { font-weight: 700; }
           <button type="button" data-del title="この線を消す（Delete）">消す</button>
         </div>
         <div class="linepop boxpop" id="boxPop" role="toolbar" aria-label="箱の色" hidden>
-          <span class="lbl">色</span>
-          <button type="button" data-bc="" title="スタイルの色に戻す">標準</button><button type="button" class="sw" data-bc="FFFF99" title="黄" aria-label="黄" style="background:#FFFF99"></button><button type="button" class="sw" data-bc="FFE699" title="山吹" aria-label="山吹" style="background:#FFE699"></button><button type="button" class="sw" data-bc="F8CBAD" title="橙" aria-label="橙" style="background:#F8CBAD"></button><button type="button" class="sw" data-bc="FFC7CE" title="桃" aria-label="桃" style="background:#FFC7CE"></button><button type="button" class="sw" data-bc="E2EFDA" title="薄緑" aria-label="薄緑" style="background:#E2EFDA"></button><button type="button" class="sw" data-bc="C6E0B4" title="緑" aria-label="緑" style="background:#C6E0B4"></button><button type="button" class="sw" data-bc="DDEBF7" title="薄青" aria-label="薄青" style="background:#DDEBF7"></button><button type="button" class="sw" data-bc="BDD7EE" title="青" aria-label="青" style="background:#BDD7EE"></button><button type="button" class="sw" data-bc="CCFFFF" title="水色" aria-label="水色" style="background:#CCFFFF"></button><button type="button" class="sw" data-bc="E4DFEC" title="薄紫" aria-label="薄紫" style="background:#E4DFEC"></button><button type="button" class="sw" data-bc="D9D9D9" title="灰" aria-label="灰" style="background:#D9D9D9"></button><button type="button" class="sw" data-bc="FFFFFF" title="白" aria-label="白" style="background:#FFFFFF"></button>
+          <div class="row"><span class="lbl">塗り</span>
+          <button type="button" data-bc="" title="スタイルの色に戻す">標準</button><button type="button" class="sw" data-bc="FFFF99" title="黄" aria-label="黄" style="background:#FFFF99"></button><button type="button" class="sw" data-bc="FFE699" title="山吹" aria-label="山吹" style="background:#FFE699"></button><button type="button" class="sw" data-bc="F8CBAD" title="橙" aria-label="橙" style="background:#F8CBAD"></button><button type="button" class="sw" data-bc="FFC7CE" title="桃" aria-label="桃" style="background:#FFC7CE"></button><button type="button" class="sw" data-bc="E2EFDA" title="薄緑" aria-label="薄緑" style="background:#E2EFDA"></button><button type="button" class="sw" data-bc="C6E0B4" title="緑" aria-label="緑" style="background:#C6E0B4"></button><button type="button" class="sw" data-bc="DDEBF7" title="薄青" aria-label="薄青" style="background:#DDEBF7"></button><button type="button" class="sw" data-bc="BDD7EE" title="青" aria-label="青" style="background:#BDD7EE"></button><button type="button" class="sw" data-bc="CCFFFF" title="水色" aria-label="水色" style="background:#CCFFFF"></button><button type="button" class="sw" data-bc="E4DFEC" title="薄紫" aria-label="薄紫" style="background:#E4DFEC"></button><button type="button" class="sw" data-bc="D9D9D9" title="灰" aria-label="灰" style="background:#D9D9D9"></button><button type="button" class="sw" data-bc="FFFFFF" title="白" aria-label="白" style="background:#FFFFFF"></button></div>
+          <div class="row"><span class="lbl">文字</span>
+          <button type="button" data-tc="" title="スタイルの文字の色に戻す">標準</button><button type="button" class="tc" data-tc="FF0000" title="赤" aria-label="文字を赤に" style="color:#FF0000">A</button><button type="button" class="tc" data-tc="C00000" title="濃い赤" aria-label="文字を濃い赤に" style="color:#C00000">A</button><button type="button" class="tc" data-tc="0070C0" title="青" aria-label="文字を青に" style="color:#0070C0">A</button><button type="button" class="tc" data-tc="00B050" title="緑" aria-label="文字を緑に" style="color:#00B050">A</button><button type="button" class="tc" data-tc="ED7D31" title="橙" aria-label="文字を橙に" style="color:#ED7D31">A</button><button type="button" class="tc" data-tc="7030A0" title="紫" aria-label="文字を紫に" style="color:#7030A0">A</button><button type="button" class="tc" data-tc="808080" title="灰" aria-label="文字を灰に" style="color:#808080">A</button></div>
         </div>
         <div class="scroller" id="scroller"><div class="paper" id="paper"></div></div>
       </div>
       <div class="stats">
         <span id="stats"></span>
-        <span>箱・黒い点・線はドラッグで動かせます（手順の欄も一緒に変わります）。箱をクリックすると色を変えられます。<button id="btnReset" class="linkbtn" type="button" hidden>配置を元に戻す</button> <button id="btnShowLines" class="linkbtn" type="button" hidden>消した線を戻す</button></span>
+        <span>箱・黒い点・線はドラッグで動かせます（手順の欄も一緒に変わります）。箱をクリックすると、塗りと文字の色を変えられます。<button id="btnReset" class="linkbtn" type="button" hidden>配置を元に戻す</button> <button id="btnShowLines" class="linkbtn" type="button" hidden>消した線を戻す</button></span>
       </div>
     </section>
   </main>
@@ -1195,14 +1201,14 @@ function layout(g, o) {
     }
   }
   // 箱ごとの色（黄色の箱は見出し、小項目は 1 つずつ、照査・打合せも 1 つずつ）
-  const bc = o.boxColors || {};
+  const bc = o.boxColors || {}, tc = o.textColors || {};
   for (const n of L.nodes) {
     if (n.kind === "bar") continue;
-    n.fill = bc[n.key] || null;
-    if (n.head) n.head.fill = n.fill;
-    (n.subBoxes || []).forEach(b => { b.key = `sub:${lineIds[b.line] || b.line}`; b.fill = bc[b.key] || null; });
+    n.fill = bc[n.key] || null; n.tcolor = tc[n.key] || null;
+    if (n.head) { n.head.fill = n.fill; n.head.tcolor = n.tcolor; }
+    (n.subBoxes || []).forEach(b => { b.key = `sub:${lineIds[b.line] || b.line}`; b.fill = bc[b.key] || null; b.tcolor = tc[b.key] || null; });
   }
-  for (const nt of L.notes) nt.fill = bc[nt.key] || null;
+  for (const nt of L.notes) { nt.fill = bc[nt.key] || null; nt.tcolor = tc[nt.key] || null; }
   return L;
 }
 
@@ -1250,25 +1256,25 @@ function svgOf(L, st, forImage) {
     if (hasSubs(n)) {
       out.push(svgRect(n, st.body, st.proc[1], st.lineW, "shape"));
       out.push(svgRect(n.head, n.head.fill || st.head, st.proc[1], st.lineW));
-      out.push(svgText(n.head, st.text, "c"));
+      out.push(svgText(n.head, n.head.tcolor || st.text, "c"));
       for (const ln of L.lines) if (ln.type === "sub" && ln.owner === n) {
         out.push(`<path d="M${f1(ln.S[0])},${f1(ln.S[1])} L${f1(ln.E[0])},${f1(ln.E[1])}" stroke="${c(st.arrow)}" stroke-width="${st.lineW}" marker-end="url(#ah)"/>`);
       }
       n.subBoxes.forEach((b, j) => {
-        out.push(`<g class="sub" data-sub="${j}" data-line="${b.line}">${svgRect(b, b.fill || st.sub[0], st.sub[1], st.lineW)}${svgText(b, st.text, "l")}</g>`);
+        out.push(`<g class="sub" data-sub="${j}" data-line="${b.line}">${svgRect(b, b.fill || st.sub[0], st.sub[1], st.lineW)}${svgText(b, b.tcolor || st.text, "l")}</g>`);
       });
     } else {
       const [fill0, line] = st[n.look], fill = n.fill || fill0;
       const x = n.x - n.w / 2, y = topOf(n);
       if (n.look === "dec") out.push(`<path class="shape" d="M${f1(n.x)},${f1(y)} L${f1(x + n.w)},${f1(n.y)} L${f1(n.x)},${f1(y + n.h)} L${f1(x)},${f1(n.y)} Z" fill="${c(fill)}" stroke="${c(line)}" stroke-width="${st.lineW}"/>`);
       else out.push(`<rect class="shape" x="${f1(x)}" y="${f1(y)}" width="${f1(n.w)}" height="${f1(n.h)}"${n.look === "term" ? ` rx="${f1(n.h / 2)}"` : ""} fill="${c(fill)}" stroke="${c(line)}" stroke-width="${st.lineW}"/>`);
-      out.push(svgText(n, st.text, "c"));
+      out.push(svgText(n, n.tcolor || st.text, "c"));
     }
     out.push(`</g>`);
   });
   L.lines.forEach((ln, i) => { if (ln.type === "note") drawLine(ln, i); });
   L.notes.forEach((n, j) => {
-    out.push(`<g class="node" data-note="${j}" data-line="${n.line}">${svgRect(n, n.fill || st.notes[n.cat], st.proc[1], st.lineW, "shape")}${svgText(n, st.text, "c")}</g>`);
+    out.push(`<g class="node" data-note="${j}" data-line="${n.line}">${svgRect(n, n.fill || st.notes[n.cat], st.proc[1], st.lineW, "shape")}${svgText(n, n.tcolor || st.text, "c")}</g>`);
   });
   // 色を選んでいる箱は、まわりに色を付けて目立たせる
   if (selBox && !forImage) {
@@ -1320,7 +1326,7 @@ function slideXml(L, st, font) {
     const ins = EMU(textBox(t).ins);
     const body = t.label === undefined ? "" :
       `<p:txBody><a:bodyPr wrap="square" lIns="${ins}" tIns="0" rIns="${ins}" bIns="0" rtlCol="0" anchor="ctr"><a:noAutofit/></a:bodyPr><a:lstStyle/>` +
-      `<a:p><a:pPr algn="${align}"><a:lnSpc><a:spcPts val="${Math.round(t.fs * LH * 100)}"/></a:lnSpc></a:pPr>${runXml(t.label, t.fs, st.text, font)}</a:p></p:txBody>`;
+      `<a:p><a:pPr algn="${align}"><a:lnSpc><a:spcPts val="${Math.round(t.fs * LH * 100)}"/></a:lnSpc></a:pPr>${runXml(t.label, t.fs, t.tcolor || st.text, font)}</a:p></p:txBody>`;
     return `<p:sp><p:nvSpPr><p:cNvPr id="${id}" name="${name} ${id++}"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>` +
       `<p:spPr>${xfrm(t.x - t.w / 2, topOf(t), t.w, t.h)}<a:prstGeom prst="${prst}"><a:avLst/></a:prstGeom>` +
       `<a:solidFill><a:srgbClr val="${fill}"/></a:solidFill>${lnXml(line, st.lineW, false, false)}</p:spPr>${body}</p:sp>`;
@@ -1528,13 +1534,14 @@ let offsets = {};   // ドラッグで動かした量（図形ごと、pt）
 let rewires = {};   // 付け替えた矢印（矢印ごと、はし → 箱）
 let lineStyles = {};   // 線ごとの実線・点線
 let boxColors = {};   // 箱ごとの色（箱をクリックして選んだ色。キー → "RRGGBB"）
+let textColors = {};   // 箱ごとの文字の色（変更・追加を赤にするなど。キーは boxColors と同じ）
 let selWire = null;    // 選んでいる線
 let selBox = null;   // 色を選んでいる箱
 
 function options() {
   return {
     size: $("optSize").value, style: $("optStyle").value, font: $("optFont").value,
-    shape: "same", num: true, title: clean($("optTitle").value), offsets, rewires, lineStyles, boxColors,
+    shape: "same", num: true, title: clean($("optTitle").value), offsets, rewires, lineStyles, boxColors, textColors,
   };
 }
 
@@ -1718,7 +1725,7 @@ function markCurrent() {
 
 function save() {
   try {
-    const o = { src: ta.value, offsets, rewires, lineIds, lineStyles, boxColors };
+    const o = { src: ta.value, offsets, rewires, lineIds, lineStyles, boxColors, textColors };
     optIds.forEach(id => { o[id] = $(id).value; });
     localStorage.setItem("fc-tool-v1", JSON.stringify(o));
   } catch (e) { /* 保存できなくても動く */ }
@@ -1732,6 +1739,7 @@ function load() {
   if (o && o.rewires && typeof o.rewires === "object") rewires = o.rewires;
   if (o && o.lineStyles && typeof o.lineStyles === "object") lineStyles = o.lineStyles;
   if (o && o.boxColors && typeof o.boxColors === "object") boxColors = o.boxColors;
+  if (o && o.textColors && typeof o.textColors === "object") textColors = o.textColors;
   if (o && Array.isArray(o.lineIds) && o.lineIds.length === ta.value.split("\n").length) {
     lineIds = o.lineIds;
     prevLines = ta.value.split("\n");
@@ -1866,6 +1874,7 @@ $("sample").addEventListener("change", e => {
   offsets = {};
   rewires = {};
   boxColors = {};
+  textColors = {};
   if (k === "word") { $("optSize").value = "a4p"; $("optStyle").value = "gyomu"; }
   update();
   commit();
@@ -1967,8 +1976,9 @@ function showBoxPop(key, cx, cy) {
   if (selWire) { linePop.hidden = true; selWire = null; }
   selBox = key;
   update();
-  const cur = boxColors[key] || "";
+  const cur = boxColors[key] || "", curT = textColors[key] || "";
   boxPop.querySelectorAll("[data-bc]").forEach(b => b.classList.toggle("on", b.dataset.bc === cur));
+  boxPop.querySelectorAll("[data-tc]").forEach(b => b.classList.toggle("on", b.dataset.tc === curT));
   boxPop.hidden = false;
   const box = boxPop.parentElement.getBoundingClientRect();
   boxPop.style.left = `${Math.min(Math.max(8, cx - box.left + 10), box.width - boxPop.offsetWidth - 8)}px`;
@@ -1981,12 +1991,13 @@ function hideBoxPop() {
   update();
 }
 boxPop.addEventListener("click", e => {
-  const b = e.target.closest("[data-bc]");
+  const b = e.target.closest("[data-bc], [data-tc]");
   if (!b || !selBox) return;
-  if (b.dataset.bc) boxColors[selBox] = b.dataset.bc; else delete boxColors[selBox];
+  const text = b.dataset.tc !== undefined, store = text ? textColors : boxColors, v = text ? b.dataset.tc : b.dataset.bc;
+  if (v) store[selBox] = v; else delete store[selBox];
   update();
   commit();
-  boxPop.querySelectorAll("[data-bc]").forEach(x => x.classList.toggle("on", x === b));
+  boxPop.querySelectorAll(text ? "[data-tc]" : "[data-bc]").forEach(x => x.classList.toggle("on", x === b));
 });
 paper.addEventListener("pointerdown", () => { if (selBox) hideBoxPop(); }, true);
 document.addEventListener("keydown", e => { if (selBox && e.key === "Escape") hideBoxPop(); });
@@ -5707,7 +5718,7 @@ $("tabFlow").parentElement.addEventListener("keydown", e => {
 
 // ---------- 入力をまとめて保存・開く ----------
 function flowData() {
-  const o = { src: ta.value, offsets, rewires, lineIds, lineStyles, boxColors };
+  const o = { src: ta.value, offsets, rewires, lineIds, lineStyles, boxColors, textColors };
   optIds.forEach(id => { o[id] = $(id).value; });
   return o;
 }
@@ -5736,6 +5747,7 @@ $("fileOpen").addEventListener("change", async e => {
   rewires = fl.rewires && typeof fl.rewires === "object" ? fl.rewires : {};
   lineStyles = fl.lineStyles && typeof fl.lineStyles === "object" ? fl.lineStyles : {};
   boxColors = fl.boxColors && typeof fl.boxColors === "object" ? fl.boxColors : {};
+  textColors = fl.textColors && typeof fl.textColors === "object" ? fl.textColors : {};
   if (Array.isArray(fl.lineIds) && fl.lineIds.length === fl.src.split("\n").length) { lineIds = fl.lineIds; prevLines = fl.src.split("\n"); }
   else { lineIds = []; prevLines = []; }
   sched = normalizeSched(o.plan);
@@ -5753,7 +5765,7 @@ $("fileOpen").addEventListener("change", async e => {
 const past = [], future = [];
 let current = "";
 function snapshot() {
-  return JSON.stringify({ src: ta.value, offsets, rewires, lineIds, lineStyles, boxColors, opts: optIds.map(id => $(id).value), plan: sched });
+  return JSON.stringify({ src: ta.value, offsets, rewires, lineIds, lineStyles, boxColors, textColors, opts: optIds.map(id => $(id).value), plan: sched });
 }
 function refreshUndo() {
   $("btnUndo").disabled = !past.length && snapshot() === current;
@@ -5779,6 +5791,7 @@ function restore(snap) {
   rewires = o.rewires;
   lineStyles = o.lineStyles || {};
   boxColors = o.boxColors || {};
+  textColors = o.textColors || {};
   optIds.forEach((id, i) => { $(id).value = o.opts[i]; });
   if (o.plan) {
     sched = normalizeSched(o.plan);
