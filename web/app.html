@@ -443,6 +443,13 @@ table.reptbl.items tr.top td:first-child { font-weight: 700; }
     </section>
   </main>
 </div>
+<dialog id="numPick" class="pick-dlg" aria-labelledby="numPickTitle">
+  <h2 id="numPickTitle">フローチャートに反映</h2>
+  <p class="hint">工程表の作業の番号（1.　2.）も、フローチャートの黄色の箱に付けますか？箱の中の小項目には、いつもどおりフローチャートが (1)(2) と番号を付けます（1.1. → (1)）。照査・打合せなどの枝分かれには付けません。</p>
+  <div class="pick-list"><button type="button" class="btn" id="numYes"><b>番号を付けて反映</b><span>例：1.詳細検討</span></button>
+    <button type="button" class="btn" id="numNo"><b>番号なしで反映</b><span>例：詳細検討</span></button></div>
+  <div class="pick-foot"><button type="button" class="btn" id="numCancel">やめる</button></div>
+</dialog>
 <dialog id="xlPick" class="pick-dlg" aria-labelledby="xlPickTitle">
   <h2 id="xlPickTitle">どのシートを読み込みますか？</h2>
   <p class="hint" id="xlPickNote"></p>
@@ -2725,7 +2732,7 @@ function normalizeSched(o) {
 }
 
 // Excel のサンプル（工程表自動作成ツール.xlsm の入力シートと同じ）
-// [作業項目, 開始日, 終了日, 日数, 実績 開始日, 終了日, 日数, 備考]
+// [作業項目, 開始日, 終了日, 日数, 実績 開始日, 終了日, 日数, 備考, 段（番号のない行：1＝作業、2＝小項目）]
 const PLAN_SAMPLE = {
   head: { project: "令和８年度　○○○○整備業務（その１）○○施設検討業務一式", date: "2026-02-26", address: "○○県○○市○○町１丁目２番３号",
           company: "株式会社○○○○", name: "代表取締役　○○　○○", manager: "部　長　○○　○○", staff: "係　長　○○　○○", contact: "０００－０００－００００" },
@@ -2739,15 +2746,15 @@ const PLAN_SAMPLE = {
     ["1.6.施工計画", "2026-07-01", "2026-07-20"],
     ["1.7.図面作成", "2026-07-21", "2026-08-10", "", "2026-07-27", "", "", "開始日をずらす"],
     ["1.8.数量計算", "", "2026-08-31", "21"],
-    ["1.9.照査", "2026-03-09", "", "", "", "", "", "3回"],
+    ["照査", "2026-03-09", "", "", "", "", "", "3回", "2"],
     ["", "2026-07-06"],
     ["", "2026-09-24"],
-    ["1.10.報告書作成", "2026-09-01", "2026-09-30"],
+    ["1.9.報告書作成", "2026-09-01", "2026-09-30"],
     ["2.周辺対策検討"],
     ["2.1.周辺対策の検討", "2026-05-01", "2026-07-10"],
     ["2.2.前後区間への影響検討", "2026-07-11", "2026-08-10"],
     ["2.3.対策工の検討", "2026-06-01", "2026-06-20"],
-    ["3.打合せ協議（中間５回・計７回）", "2026-03-16", "", "2"],
+    ["打合せ協議（中間５回・計７回）", "2026-03-16", "", "2", "", "", "", "", "1"],
     ["", "2026-04-13", "", "2"],
     ["", "2026-04-27", "", "2"],
     ["", "2026-05-18", "", "2", "2026-05-25", "", "", "第4回を延期"],
@@ -3220,10 +3227,10 @@ function flowItems() {
   const step = (st, unit, kind, shape = {}, u = null) => {
     if (st.kind !== "proc" || !strip(st.text)) return;
     const k = kind === "step" ? 0 : +String(st.uid).split(/\|<?/).pop();
-    out.push({ text: strip(st.text), depth: 1, kind, unit, line: st.line, k, shape: Object.assign({ kind }, shape) });
+    out.push({ text: strip(st.text), raw: clean(st.text), depth: 1, kind, unit, line: st.line, k, shape: Object.assign({ kind }, shape) });
     if (u) out.push(...notesOf(u, p => p === "head"));
     (st.subs || []).forEach((sb, j) => {
-      if (strip(sb.text)) out.push({ text: strip(sb.text), depth: 2, kind: "sub", unit, line: sb.line, parent: (kind === "side" ? "<" : "") + itemKey(strip(st.text)), shape: { kind: "sub" } });
+      if (strip(sb.text)) out.push({ text: strip(sb.text), raw: clean(sb.text), depth: 2, kind: "sub", unit, line: sb.line, parent: (kind === "side" ? "<" : "") + itemKey(strip(st.text)), shape: { kind: "sub" } });
       if (u) out.push(...notesOf(u, p => p === `between${j + 1}`));
     });
   };
@@ -3239,7 +3246,7 @@ function flowItems() {
 }
 function flowTasks() {
   let n = 0, m = 0;
-  return flowItems().map(it => (it.depth === 1 ? `${++n}.${(m = 0, it.text)}` : `${n}.${++m}.${it.text}`));
+  return flowItems().map(it => (isNoteItem(it) ? it.text : it.depth === 1 ? `${++n}.${(m = 0, it.text)}` : `${n}.${++m}.${it.text}`));
 }
 const noteSig = it => `${it.key}|${it.anchor}|${it.place}|${it.left ? "左" : "右"}`;
 const kindTag = it => { const k = it.fs ? it.fs.kind : it.kind; return k === "side" ? "<" : k === "lane" ? "|" : ""; };
@@ -3252,13 +3259,15 @@ const planSignature = () => signature(planItems());
 // 同じ名前の箱はそのまま残し、名前を変えた行は同じ箱の名前を変え、増えた行は足し、消した行は消す。
 // 判断（？）・開始・終了・戻りの矢印など、工程表にないものはそのまま。
 const PLAN_NUM_RE = /^([0-9０-９]+)((?:[.．][0-9０-９]+)*)(?:[.．)）、:：]\s*|\s+)/;
-// 作業項目の番号を上から付け直す（「1.」「1.1.」の段はそのまま、番号のない行はさわらない）
+// 作業項目の番号を上から付け直す（「1.」「1.1.」の段はそのまま、番号のない行はさわらない）。
+// 枝分かれ（照査・打合せなど）の行は数えず、番号があれば外す（段は覚えておく）
 function renumberRows(rows) {
   const cnt = [];
   let changed = 0;
   for (const r of rows) {
     const name = clean(r.name), m = name.match(PLAN_NUM_RE);
     if (!m) continue;
+    if (isBranchRow(r)) { r.lv = m[2] ? "2" : "1"; r.name = clean(name.slice(m[0].length)) || name; changed++; continue; }
     const depth = 1 + (m[2].match(/[.．]/g) || []).length;
     cnt.length = depth;
     for (let d = 0; d < depth - 1; d++) cnt[d] = cnt[d] || 1;   // 親のない「1.1.」なども 1 から
@@ -3269,7 +3278,7 @@ function renumberRows(rows) {
   return changed;
 }
 const NOTE_NAME_RE = NOTE_LINE_RE;
-function planItems() {
+function planItems(withNum) {   // withNum：作業の名前に番号（1. 2.）を付けたまま
   // 行ごとの期間（その行と「＋期間」の行をまとめた、いちばん早い日〜いちばん遅い日。実績があればそちら）
   const res = computeSched(sched).rowRes, items = [];
   const grow = (per, x) => {
@@ -3279,11 +3288,12 @@ function planItems() {
   };
   sched.rows.forEach((r, i) => {
     if (!clean(r.name)) { if (items.length) items[items.length - 1].per = grow(items[items.length - 1].per, res[i]); return; }
-    const name = clean(r.name), m = name.match(PLAN_NUM_RE);
-    const text = clean(m ? name.slice(m[0].length) : name) || name;
-    const depth = m ? (m[2] ? 2 : 1) : r.lv === "2" ? 2 : 1, key = itemKey(text);
+    const name = clean(r.name), m = name.match(PLAN_NUM_RE), bare = clean(m ? name.slice(m[0].length) : name) || name;
+    const depth = m ? (m[2] ? 2 : 1) : r.lv === "2" ? 2 : 1;
+    // 番号を付けるのは作業（黄色の箱）だけ。箱の中の小項目には、フローチャートが (1)(2) と番号を付ける
+    const text = withNum && m && depth === 1 && !isBranchRow(r) ? name : bare, key = itemKey(text);
     // 形を覚えていない行（工程表で打った行）は、照査・打合せらしい名前なら直前の手順から横に分ける
-    const fs = NOTE_NAME_RE.test(text) && !(r.fs && ["note", "lane", "side"].includes(r.fs.kind)) ? { kind: "note" } : r.fs || null;
+    const fs = NOTE_NAME_RE.test(bare) && !(r.fs && ["note", "lane", "side"].includes(r.fs.kind)) ? { kind: "note" } : r.fs || null;
     items.push({ text, depth, key, fs, typed: !r.fs, left: !!(fs && fs.kind === "note" && fs.left), per: grow(null, res[i]) });
   });
   // 「3.打合せ」の下に「3.1.第1回」などがあれば、見出しの打合せは消して、下の行をそれぞれ打合せの箱にする（打合せ①②…）
@@ -3443,8 +3453,11 @@ function sortFlowByDate(P) {
   prevLines = out.map(r => r.t);
   return moved;
 }
-function exportToFlow() {
-  const PA = planItems();
+function exportToFlow(withNum) {
+  const PA = planItems(withNum === true);
+  // 番号を付ける・外すを選んだとき（作業項目に番号があるとき）だけ、番号のちがいも直す
+  const syncNum = typeof withNum === "boolean" && sched.rows.some(r => !isBranchRow(r) && PLAN_NUM_RE.test(clean(r.name)));
+  const numOnly = (a, b) => a !== b && clean(a.replace(PLAN_NUM_RE, "")) === clean(b.replace(PLAN_NUM_RE, ""));
   if (!PA.length) { toast("工程表に作業項目がありません。"); return; }
   commit();
   // まず、今ある手順を工程表の開始日の順に並べ替える（「> #番号」は update で付け直される）
@@ -3469,7 +3482,8 @@ function exportToFlow() {
   // 同じ場所で「消えた箱」と「増えた行」があれば、順番に組にして名前の変更にする
   const ops = [];
   for (let x = 0; x < raw.length;) {
-    if (!raw[x].add && !raw[x].del) { ops.push(raw[x++]); continue; }
+    // 同じ箱で、名前が番号のぶんだけちがうもの（番号を付ける・外す）は名前の変更にする
+    if (!raw[x].add && !raw[x].del) { const o = raw[x++]; ops.push(syncNum && numOnly(o.f.raw ?? o.f.text, o.p.text) ? { f: o.f, p: o.p, rename: true } : o); continue; }
     const dels = [], ins = [];
     while (x < raw.length && (raw[x].add || raw[x].del)) (raw[x].del ? dels : ins).push(raw[x++]);
     // 名前の変更にするのは、同じ段（作業どうし・小項目どうし）で、同じ名前ではないものだけ
@@ -3536,7 +3550,7 @@ function exportToFlow() {
         if (f.kind === "note") (noteMods[f.id] = noteMods[f.id] || []).push({ idx: f.idx, to });
         else if (f.kind === "lane" || f.kind === "side") seg(rows, f).parts[f.k] = to;
         else if (o.del) drop.add(f.id);
-        else { const r = rows[rowAt(rows, f.id)]; r.t = r.t.includes(f.text) ? r.t.replace(f.text, to) : (f.kind === "sub" ? `・${to}` : to); }
+        else { const r = rows[rowAt(rows, f.id)], from = f.raw || f.text; r.t = r.t.includes(from) ? r.t.replace(from, to) : (f.kind === "sub" ? `・${to}` : to); }
       }
       if (o.add) {
         const fs = o.p.fs || {};
@@ -3621,11 +3635,11 @@ function importFlow(silent) {
     if (clean(r.name) || !g) { g = { head: r, rest: [] }; groups.push(g); if (clean(r.name) && !byKey.has(itemKey(r.name))) byKey.set(itemKey(r.name), g); }
     else g.rest.push(r);
   });
-  const used = new Set(), rows = [], shapes = flowItems().map(it => it.shape);
+  const used = new Set(), rows = [], its = flowItems(), shapes = its.map(it => it.shape);
   names.forEach((nm, x) => {
-    const hit = byKey.get(itemKey(nm));
-    if (hit && !used.has(hit)) { used.add(hit); rows.push(Object.assign(hit.head, { name: nm, fs: shapes[x] }), ...hit.rest); }
-    else rows.push(newRow({ name: nm, fs: shapes[x] }));
+    const hit = byKey.get(itemKey(nm)), lv = isNoteItem(its[x]) ? (its[x].depth === 2 ? "2" : "1") : "";   // 照査・打合せは番号がないので段を覚える
+    if (hit && !used.has(hit)) { used.add(hit); rows.push(Object.assign(hit.head, { name: nm, fs: shapes[x] }, lv ? { lv } : {}), ...hit.rest); }
+    else rows.push(newRow({ name: nm, fs: shapes[x], lv }));
   });
   const hasData = r => ["s", "e", "d", "cs", "ce", "cd"].some(k => clean(r[k]));
   const lost = groups.filter(x => !used.has(x) && [x.head, ...x.rest].some(hasData)).length;
@@ -3775,6 +3789,7 @@ function setLevel(i, lv) {
   const r = sched.rows[i], name = clean(r.name), m = name.match(PLAN_NUM_RE);
   r.lv = String(lv);
   if (!name) return;
+  if (isBranchRow(r)) { if (m) { r.name = clean(name.slice(m[0].length)) || name; renumberRows(sched.rows); } return; }   // 枝分かれは番号なし
   // 番号を使っていない表なら、番号は付けない（段だけ覚える）
   if (!m && !sched.rows.some((x, j) => j !== i && PLAN_NUM_RE.test(clean(x.name)))) return;
   r.name = `${lv === 2 ? "0.0." : "0."}${clean(m ? name.slice(m[0].length) : name)}`;
@@ -3784,6 +3799,7 @@ function numberName(i) {
   const r = sched.rows[i], name = clean(r.name);
   if (!name) return;
   const m = name.match(PLAN_NUM_RE);
+  if (isBranchRow(r)) { if (m) renumberRows(sched.rows); return; }   // 照査・打合せなどは番号を付けず、ほかの番号もずらさない
   if (m) { r.lv = m[2] ? "2" : "1"; renumberRows(sched.rows); return; }
   if (sched.rows.some((x, j) => j !== i && PLAN_NUM_RE.test(clean(x.name)))) setLevel(i, rowLevel(r));
 }
@@ -3841,7 +3857,7 @@ taskRows.addEventListener("input", e => {
   if (i < 0 || !k) return;
   if (k === "lv") {
     const r = sched.rows[i], v = e.target.value;
-    if (v === "b" || v === "bl") r.fs = v === "bl" ? { kind: "note", left: true } : { kind: "note" };   // 右・左に分かれる箱にする（段と番号はそのまま）
+    if (v === "b" || v === "bl") { r.fs = v === "bl" ? { kind: "note", left: true } : { kind: "note" }; renumberRows(sched.rows); }   // 右・左に分かれる箱にする（番号は外して、ほかの番号を詰める）
     else {
       if (r.fs && r.fs.kind === "note") r.fs = null;
       setLevel(i, +v);
@@ -3964,8 +3980,25 @@ $("btnAddRow").addEventListener("click", () => addTaskRow(1));
 $("btnAddSub").addEventListener("click", () => addTaskRow(2));
 $("btnImport").addEventListener("click", () => importFlow(false));
 $("btnImport2").addEventListener("click", () => importFlow(false));
-$("btnExport").addEventListener("click", exportToFlow);
-$("btnExport2").addEventListener("click", exportToFlow);
+// 反映：作業項目に番号（1. 1.1.）があれば、フローチャートにも付けるかを聞く（前の選び方を先に選んでおく）
+function askFlowNum() {
+  if (!sched.rows.some(r => !isBranchRow(r) && PLAN_NUM_RE.test(clean(r.name)))) return Promise.resolve(false);
+  return new Promise(resolve => {
+    const dlg = $("numPick"), done = v => { dlg.close(); dlg.oncancel = null; ["numYes", "numNo", "numCancel"].forEach(id => { $(id).onclick = null; }); resolve(v); };
+    $("numYes").onclick = () => done(true); $("numNo").onclick = () => done(false); $("numCancel").onclick = () => done(null);
+    dlg.oncancel = () => done(null);
+    dlg.showModal();
+    $(sched.cfg.flowNum === "1" ? "numYes" : "numNo").focus();
+  });
+}
+async function reflectToFlow() {
+  const v = await askFlowNum();
+  if (v === null) return;
+  if (sched.rows.some(r => PLAN_NUM_RE.test(clean(r.name)))) sched.cfg.flowNum = v ? "1" : "";
+  exportToFlow(v);
+}
+$("btnExport").addEventListener("click", reflectToFlow);
+$("btnExport2").addEventListener("click", reflectToFlow);
 $("btnSyncIgnore").addEventListener("click", () => { sched.ignoreSync = flowSignature(); planUpdate(); commit(); });
 $("planSample").addEventListener("change", e => {
   const k = e.target.value;
@@ -3987,7 +4020,7 @@ $("planSample").addEventListener("change", e => {
   commit();
   const sc = defaultSched();
   Object.assign(sc.head, PLAN_SAMPLE.head);
-  sc.rows = PLAN_SAMPLE.rows.map(a => newRow({ name: a[0] || "", s: a[1] || "", e: a[2] || "", d: a[3] || "", cs: a[4] || "", ce: a[5] || "", cd: a[6] || "", note: a[7] || "" }));
+  sc.rows = PLAN_SAMPLE.rows.map(a => newRow({ name: a[0] || "", s: a[1] || "", e: a[2] || "", d: a[3] || "", cs: a[4] || "", ce: a[5] || "", cd: a[6] || "", note: a[7] || "", lv: a[8] || "" }));
   sc.ignoreSync = flowSignature();
   sched = sc;
   fillFields();
