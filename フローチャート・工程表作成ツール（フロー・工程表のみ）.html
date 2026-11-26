@@ -375,6 +375,7 @@ table.reptbl.items tr.top td:first-child { font-weight: 700; }
         <div class="actions">
           <button id="btnImport" class="btn" type="button" title="フローチャートの手順・小項目・照査・打合せを作業項目にします（入れた日付は残ります）">フローチャートの手順を取り込む</button>
           <button id="btnExport" class="btn" type="button" title="工程表の作業項目（1. は手順、1.1. は小項目）をフローチャートの手順に反映します">フローチャートに反映</button>
+          <button id="btnToReport" class="btn" type="button" title="工程表の作業と日付で履行報告書（月ごとの進捗率・業務工程表・グラフ）を作り直して、履行報告書のタブを開きます">履行報告書に反映</button>
           <input id="fileXlsx" type="file" accept=".xlsx,.xlsm,.xls,.pdf,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel.sheet.macroEnabled.12,application/vnd.ms-excel,application/pdf" hidden>
           <select id="planSample" aria-label="サンプル・Excel・PDF を入れる">
             <option value="">サンプル・Excel・PDF を入れる…</option>
@@ -4016,6 +4017,15 @@ async function reflectToFlow() {
   exportToFlow(v);
 }
 $("btnExport").addEventListener("click", reflectToFlow);
+// 履行報告書に反映：履行報告書はいつも工程表から作るので、作り直してタブを開く
+$("btnToReport").addEventListener("click", () => {
+  if (!computePlan().model) { toast("開始日・終了日・日数が入った作業がありません。先に日付を入れてください。"); return; }
+  setView("report");
+  window.scrollTo(0, 0);
+  const rp = sched.report, RM = reportModel(sched);
+  const kikan = (rp.kStart && dayOf(rp.kStart) !== RM.S) || (rp.kEnd && dayOf(rp.kEnd) !== RM.E);   // 工期を手で入れていて、工程表とちがう
+  toast(`工程表の作業と日付を、履行報告書に反映しました。${kikan ? "工期は、履行報告書で入れた日付のままです。" : ""}`);
+});
 $("btnExport2").addEventListener("click", reflectToFlow);
 $("btnSyncIgnore").addEventListener("click", () => { sched.ignoreSync = flowSignature(); planUpdate(); commit(); });
 $("planSample").addEventListener("change", e => {
@@ -5526,7 +5536,7 @@ async function saveReport() {
 const VIEWS = { flow: ["flowView", "tabFlow"], plan: ["planView", "tabPlan"], report: ["repView", "tabRep"] };
 // フロー・工程表だけの版（作り直しのときに true になる）：履行報告書のタブを出さない
 const NO_REPORT = true;
-if (NO_REPORT) { delete VIEWS.report; $("tabRep").hidden = true; }
+if (NO_REPORT) { delete VIEWS.report; $("tabRep").hidden = true; $("btnToReport").hidden = true; }
 function setView(v) {
   view = VIEWS[v] ? v : "flow";
   const flow = view === "flow";
