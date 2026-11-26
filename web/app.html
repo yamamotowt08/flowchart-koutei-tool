@@ -1201,8 +1201,7 @@ function svgOf(L, st, forImage) {
   }
   const WIRE_CURSOR = { v3: "ns-resize", h3: "ew-resize", j4: "move" };
   const cursorOf = ln => WIRE_CURSOR[ln.route] || (ln.edge ? (Math.abs(ln.S[0] - ln.E[0]) < 0.5 ? "ew-resize" : "ns-resize") : "pointer");
-  L.lines.forEach((ln, i) => {
-    if (ln.type === "sub") return;
+  const drawLine = (ln, i) => {
     const d = `M${ln.pts.map(p => f1(p[0]) + "," + f1(p[1])).join(" L")}`;
     out.push(`<path d="${d}" fill="none" stroke="${c(st.arrow)}" stroke-width="${ln.dashed ? Math.max(0.75, st.lineW * 0.75) : st.lineW}"${ln.dashed ? ' stroke-dasharray="4 3"' : ""}${ln.arrow ? ' marker-end="url(#ah)"' : ""}/>`);
     if (forImage) return;
@@ -1210,7 +1209,9 @@ function svgOf(L, st, forImage) {
     if (ln.key && ln.key === selWire) out.push(`<path d="${d}" fill="none" stroke="#E0752D" stroke-opacity=".45" stroke-width="5" pointer-events="none"/>`);
     // つかみやすいように、見えない太い線を重ねる（クリックで線の種類、曲がった線はドラッグで移動）
     out.push(`<path class="wire" data-w="${i}" d="${d}" fill="none" stroke="#1D6A84" stroke-opacity="0" stroke-width="9" style="cursor:${cursorOf(ln)}"/>`);
-  });
+  };
+  // 照査・打合せへの点線は、あとで箱の上に描く（小項目の間の点から、箱の中を通って分かれるのが見えるように）
+  L.lines.forEach((ln, i) => { if (ln.type !== "sub" && ln.type !== "note") drawLine(ln, i); });
   L.nodes.forEach((n, i) => {
     if (n.kind === "bar") {
       out.push(`<path d="M${f1(n.x1)},${f1(topOf(n))} H${f1(n.x2)} M${f1(n.x1)},${f1(bottomOf(n))} H${f1(n.x2)}" stroke="${c(st.arrow)}" stroke-width="${st.lineW}" fill="none"/>`);
@@ -1236,6 +1237,7 @@ function svgOf(L, st, forImage) {
     }
     out.push(`</g>`);
   });
+  L.lines.forEach((ln, i) => { if (ln.type === "note") drawLine(ln, i); });
   L.notes.forEach((n, j) => {
     out.push(`<g class="node" data-note="${j}" data-line="${n.line}">${svgRect(n, st.notes[n.cat], st.proc[1], st.lineW, "shape")}${svgText(n, st.text, "c")}</g>`);
   });
