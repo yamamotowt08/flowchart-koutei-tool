@@ -47,7 +47,7 @@ body { background: var(--desk); color: var(--ink); font: 14px/1.6 var(--f-body);
 button, input, select, textarea { font: inherit; color: inherit; }
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
-.app { max-width: 1480px; margin: 0 auto; padding-inline: 16px; padding-block: 14px 28px; display: grid; gap: 14px; }
+.app { max-width: 1800px; margin: 0 auto; padding-inline: 16px; padding-block: 14px 28px; display: grid; gap: 14px; }
 
 .bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px 20px; }
 .brand { min-width: 0; }
@@ -158,7 +158,7 @@ textarea#src { display: block; width: 100%; height: 360px; resize: vertical; bor
 .hint { margin: 0; color: var(--muted); font-size: 13px; }
 .sync { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 14px; background: var(--accent-soft); border-radius: 6px; padding: 7px 12px; font-size: 13px; }
 .tasks-wrap { overflow-x: auto; border: 1px solid var(--rule); border-radius: 6px; }
-table.tasks { border-collapse: collapse; width: 100%; min-width: 1240px; font-size: 13px; }
+table.tasks { border-collapse: collapse; width: 100%; min-width: 1340px; font-size: 13px; }
 .tasks th { background: var(--desk); padding: 4px 6px; text-align: left; font-weight: 700; white-space: nowrap; }
 .tasks thead tr:first-child th { font-family: var(--f-display); letter-spacing: .04em; text-align: center; }
 .tasks thead tr:last-child th { border-bottom: 1px solid var(--rule); }
@@ -171,23 +171,26 @@ table.tasks { border-collapse: collapse; width: 100%; min-width: 1240px; font-si
 .tasks tr.drop-before td { box-shadow: inset 0 3px 0 var(--accent); }
 .tasks tr.drop-after td { box-shadow: inset 0 -3px 0 var(--accent); }
 .tasks input, .tasks select { width: 100%; padding: 4px 6px; }
-.tasks input[type="date"] { min-width: 9em; }
-.tasks input[type="number"] { min-width: 4.4em; }
-.tasks td.name { min-width: 15em; }
+/* 日付・日数は足りる幅に決めて、残りを作業項目と備考に回す */
+.tasks input[type="date"] { width: 10.6em; }
+.tasks input[type="number"] { width: 4.4em; }
+.tasks td.name { min-width: 19.5em; }
 .tasks tr.cont td.name input { margin-left: 1.4em; width: calc(100% - 1.4em); }
 .tasks .nm { display: flex; gap: 4px; align-items: center; }
 .tasks .nm input { flex: 1; min-width: 0; }
-.tasks select.lv { width: auto; flex: none; padding: 4px 4px; font-size: 12px; }
+.tasks select.lv { width: 6.8em; flex: none; padding: 4px 2px; font-size: 12px; }
 .tasks select.lv1 { background: var(--box-soft); }
 .tasks select.lvb, .tasks select.lvbl { background: #FBE3EC; }
 .tasks tr.sub .nm { padding-left: 1.4em; }
 .tasks tr.cont td.name input::placeholder { color: var(--muted); }
 .tasks tr.bad td { background: var(--warn-soft); }
-.tasks td.res { font-size: 12px; color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; line-height: 1.35; }
+.tasks td.res { font-size: 12px; color: var(--muted); min-width: 7.4em; font-variant-numeric: tabular-nums; line-height: 1.35; }   /* 狭いときは日付と日数の間で折り返す */
 .tasks td.res .c { color: var(--chg); }
-.tasks select.swatch { border-left-width: 8px; }
+.tasks select.swatch { border-left-width: 8px; min-width: 6.4em; }   /* バー色：色の名前が読める幅 */
+.tasks td.note { min-width: 11em; }   /* 備考：10 字くらいは見える幅（広い画面ではもっと広がる） */
 .ops { white-space: nowrap; }
-.ops button { border: 1px solid var(--rule); background: var(--panel); border-radius: 4px; padding: 2px 7px; cursor: pointer; font-size: 12px; }
+.ops button + button { margin-left: 2px; }
+.ops button { border: 1px solid var(--rule); background: var(--panel); border-radius: 4px; padding: 2px 5px; cursor: pointer; font-size: 12px; }
 .ops button:hover { border-color: var(--accent); }
 .ops button[data-act="del"] { color: var(--warn); }
 .fields { display: grid; grid-template-columns: minmax(0, 10em) minmax(0, 1fr); gap: 6px 10px; align-items: center; font-size: 13px; }
@@ -3683,9 +3686,9 @@ function rowHtml(r, i) {
     + `<td>${inp("s", "date", ' aria-label="開始日"')}</td><td>${inp("e", "date", ' aria-label="終了日"')}</td><td>${inp("d", "number", ' min="1" step="1" aria-label="日数"')}</td>`
     + `<td class="chg">${inp("cs", "date", ' aria-label="実績の開始日"')}</td><td class="chg">${inp("ce", "date", ' aria-label="実績の終了日"')}</td><td class="chg">${inp("cd", "number", ' min="1" step="1" aria-label="実績の日数"')}</td>`
     + `<td><select data-k="color" class="swatch" aria-label="バー色">${colorOptions(r.color)}</select></td>`
-    + `<td>${inp("note", "text", ' aria-label="備考"')}</td>`
+    + `<td class="note">${inp("note", "text", ' aria-label="備考"')}</td>`
     + `<td class="res"></td>`
-    + `<td class="ops"><button type="button" data-act="period" title="この作業に別の期間を足す">＋期間</button> <button type="button" data-act="up" title="上へ">↑</button> <button type="button" data-act="down" title="下へ">↓</button> <button type="button" data-act="del" title="この行を消す">×</button></td>`
+    + `<td class="ops"><button type="button" data-act="period" title="この作業に別の期間を足す">＋期間</button><button type="button" data-act="up" title="上へ">↑</button><button type="button" data-act="down" title="下へ">↓</button><button type="button" data-act="del" title="この行を消す">×</button></td>`
     + "</tr>";
 }
 function renderTasks() {

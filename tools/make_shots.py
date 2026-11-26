@@ -36,6 +36,7 @@ SCENES = {
   'reflect': ("setView('flow'); pickSample('blank'); setView('plan'); pickPlan('koutei'); exportToFlow(); setView('flow');", {'r_paper': "'#paper'", 'r_bench': "'#flowView'"}),
 }
 W, HGT = 1280, 3000   # 位置を測るときと写すときは、同じ大きさの画面にする（図の大きさが画面の高さで変わるため）
+SCENE_W = {'plan': 1600, 'plan_new': 1600}   # 工程表の入力の表は、横に全部入る幅で写す
 def chrome(args, prof):
     return subprocess.run(['google-chrome', '--headless=new', '--no-sandbox', '--disable-gpu', f'--user-data-dir={prof}', '--hide-scrollbars',
                            '--virtual-time-budget=6000', '--allow-file-access-from-files'] + args, capture_output=True, timeout=180, text=True)
@@ -48,13 +49,14 @@ for name, (act, parts) in SCENES.items():
     src = os.path.join(WORK, f'_{name}.html')
     open(src, 'w', encoding='utf8').write(page0.replace('</body>', f'<script>{js}</script>\n</body>', 1))
     prof = tempfile.mkdtemp(dir=WORK)
-    dom = chrome([f'--window-size={W},{HGT}', '--dump-dom', 'file://' + src], prof).stdout
+    w = SCENE_W.get(name, W)
+    dom = chrome([f'--window-size={w},{HGT}', '--dump-dom', 'file://' + src], prof).stdout
     m = re.search(r'data-rects="([^"]*)"', dom)
     rects = json.loads(H.unescape(m.group(1)))
     if 'error' in rects: print(name, 'ERROR', rects['error']); continue
     shutil.rmtree(prof, ignore_errors=True); prof = tempfile.mkdtemp(dir=WORK)
     full = os.path.join(WORK, f'{name}_full.png')
-    chrome([f'--window-size={W},{HGT}', '--force-device-scale-factor=2', f'--screenshot={full}', 'file://' + src], prof)
+    chrome([f'--window-size={w},{HGT}', '--force-device-scale-factor=2', f'--screenshot={full}', 'file://' + src], prof)
     shutil.rmtree(prof, ignore_errors=True)
     im = Image.open(full)
     for k, r in rects.items():
