@@ -32,7 +32,7 @@ SCENES = {
   'report': ("setView('plan'); pickPlan('koutei'); sched.report.form = 'rep'; sched.report.month = '2026-06'; sched.report.actual['2026-05'] = '35'; setView('report');", {
       'h_chart': "'#repView .stage'", 'h_tabs': "'.tabs'"}),
   'report_g': ("setView('plan'); pickPlan('koutei'); sched.report.form = 'gyomu'; sched.report.month = '2026-06'; sched.report.actual['2026-05'] = '35'; sched.report.remarks = '6/15：第4回打合せ'; setView('report');", {
-      'h_items': "'#repItemsSec'", 'h_fields': "'#repView .rep-form'"}),
+      'h_items': "'#repItemsSec'", 'h_fields': "'#repView .rep-form'", 'h_gantt': "'#repGanttSec'"}),
   'reflect': ("setView('flow'); pickSample('blank'); setView('plan'); pickPlan('koutei'); exportToFlow(); setView('flow');", {'r_paper': "'#paper'", 'r_bench': "'#flowView'"}),
 }
 W, HGT = 1280, 3000   # 位置を測るときと写すときは、同じ大きさの画面にする（図の大きさが画面の高さで変わるため）

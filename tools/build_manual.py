@@ -184,7 +184,7 @@ for _ in range(3): doc.add_paragraph()
 para('フローチャート・工程表作成ツール', 24, True, ACCENT, WD_ALIGN_PARAGRAPH.CENTER, 8)
 para('操作説明書', 22, True, None, WD_ALIGN_PARAGRAPH.CENTER, 36)
 img('f_paper', 4.6)
-para('バージョン 1.14.0', 10.5, None, None, WD_ALIGN_PARAGRAPH.CENTER, 18)
+para('バージョン 1.15.0', 10.5, None, None, WD_ALIGN_PARAGRAPH.CENTER, 18)
 p = doc.add_paragraph(); p.alignment = WD_ALIGN_PARAGRAPH.LEFT
 for i, t in enumerate(['概要', '動作環境と起動', '画面構成', 'フローチャートの作成', '図の編集', 'PowerPoint への出力',
                        '工程表の作成', 'Excel への出力', '工程表からフローチャートへの反映', '履行報告書・業務履行報告書の作成', '入力の保存と読み込み', 'よくある質問']):
@@ -408,6 +408,8 @@ bullets([
     '業務工程表の単位・数量は、期間が 1 つの作業は「式・1」、複数ある作業（打合せなど）は「回・回数」とします。摘要には工程表の備考を記載します。',
 ])
 img('h_items', 16, '画面の作業項目ごとの進捗（業務履行報告書を選択したとき）')
+para('画面の「業務工程表」には、保存する 2 枚目（工程・進捗率）と同じ形の工程表を表示します（黒の線＝計画、赤の線＝実績。実績は報告する月の末日まで）。報告する月を変えると、赤の線もその月の末日までに変わります。')
+img('h_gantt', 17, '画面の業務工程表（業務履行報告書を選択したとき）')
 img2('h_gxlsx1', 'h_gxlsx2', 7.3, '保存される業務履行報告書（左：1 枚目、右：2 枚目）')
 page_break()
 

@@ -205,6 +205,7 @@ table.tasks { border-collapse: collapse; width: 100%; min-width: 1340px; font-si
 .holidays { font-size: 12px; color: var(--muted); }
 .holidays summary { cursor: pointer; }
 .gpaper { min-width: 780px; }
+.rgantt { min-width: 880px; background: #FFFFFF; }
 .rpaper svg { display: block; width: 100%; height: auto; }
 .rep-wrap { overflow-x: auto; }
 table.reptbl { border-collapse: collapse; width: 100%; font-size: 13px; font-variant-numeric: tabular-nums; }
@@ -445,6 +446,11 @@ table.reptbl.items tr.top td:first-child { font-weight: 700; }
           <tbody id="repItems"></tbody>
         </table>
       </div>
+    </section>
+    <section class="sheet" id="repGanttSec" aria-labelledby="hRepGantt" hidden>
+      <div class="sheet-head"><h2 id="hRepGantt">業務工程表</h2></div>
+      <p class="hint">保存する業務履行報告書の 2 枚目（工程・進捗率）と同じ形です。黒の線＝計画、赤の線＝実績（報告する月の末日まで）。</p>
+      <div class="rep-wrap"><div class="gpaper rgantt" id="rGantt"></div></div>
     </section>
     <section class="stage" aria-label="進捗グラフのプレビュー">
       <div class="board">
@@ -5019,6 +5025,61 @@ function reportModel(sc) {
   return { R, months, k, cur, S, E, kS, kE, start, date: dayOf(rp.date) ?? cur.last, doneAuto, nextAuto, items, gantt, changed };
 }
 
+// 業務工程表（画面の確認用。業務履行報告書の 2 枚目と同じ形：項目・単位・数量・月ごとの上中下旬・摘要。黒＝計画、赤＝実績）
+function repGanttSvg(RM) {
+  const months = RM.months, rows = RM.gantt, n = months.length;
+  const W = 1000, L0 = 6, R0 = W - 6, cName = 210, cUnit = 32, cQty = 32, cNote = 118, top = 28, h1 = 18, h2 = 13, rh = 24;
+  const x0 = L0 + cName + cUnit + cQty, x1 = R0 - cNote, cw = (x1 - x0) / n, yR = top + h1 + h2, yB = yR + rows.length * rh, H = yB + 40;
+  const out = [`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" font-family='"BIZ UDPGothic", "Meiryo UI", sans-serif'>`, `<rect width="${W}" height="${H}" fill="#FFFFFF"/>`];
+  const line = (xa, ya, xb, yb, extra = "") => out.push(`<line x1="${f1(xa)}" y1="${f1(ya)}" x2="${f1(xb)}" y2="${f1(yb)}" stroke="#000" stroke-width="0.6"${extra}/>`);
+  // 文字が欄に入りきらないときは小さくする（全角 1 字＝1 文字分、半角は 0.55 文字分で数える）
+  const fit = (t, room, fs) => { const w = [...String(t)].reduce((v, ch) => v + (/[ -~]/.test(ch) ? 0.55 : 1), 0) * fs; return w > room ? Math.max(6.5, (fs * room) / w) : fs; };
+  const text = (x, y, t, fs, anchor = "start", color = "#000") => out.push(`<text x="${f1(x)}" y="${f1(y)}" font-size="${f1(fs)}" fill="${color}" text-anchor="${anchor}" dominant-baseline="central">${esc(t)}</text>`);
+  text(L0, 13, `履行期間：${jpDate(RM.kS)}　～　${jpDate(RM.kE)}`, 12);
+  // 見出しと罫線（月の境は実線、旬の境は点線）
+  out.push(`<rect x="${L0}" y="${top}" width="${f1(R0 - L0)}" height="${f1(yB - top)}" fill="none" stroke="#000" stroke-width="0.9"/>`);
+  [L0 + cName, L0 + cName + cUnit, x0, x1].forEach(x => line(x, top, x, yB));
+  line(x0, top + h1, x1, top + h1);
+  line(L0, yR, R0, yR);
+  text(L0 + cName / 2, top + (h1 + h2) / 2, "項　　　目", 10, "middle");
+  text(L0 + cName + cUnit / 2, top + (h1 + h2) / 2, "単位", 9, "middle");
+  text(L0 + cName + cUnit + cQty / 2, top + (h1 + h2) / 2, "数量", 9, "middle");
+  text(x1 + cNote / 2, top + (h1 + h2) / 2, "摘　　要", 10, "middle");
+  months.forEach((m, i) => {
+    const xa = x0 + i * cw;
+    if (i) line(xa, top, xa, yB);
+    text(xa + cw / 2, top + h1 / 2, `${m.m}月`, fit(`${m.m}月`, cw - 2, 10), "middle", i === RM.k ? "#C00000" : "#000");
+    ["上", "中", "下"].forEach((t, j) => {
+      text(xa + (cw * (j + 0.5)) / 3, top + h1 + h2 / 2, t, Math.min(8, cw / 3.2), "middle", "#404040");
+      if (j) line(xa + (cw * j) / 3, top + h1, xa + (cw * j) / 3, yB, ' stroke-dasharray="1 2" stroke-opacity=".55"');
+    });
+  });
+  // 日付 → 横の位置（月を上旬・中旬・下旬に 3 等分。終わりは「その日まで」）
+  const xOf = (d, end) => {
+    const [yy, mm, dd] = ymdOf(d), i = months.findIndex(x => x.y === yy && x.m === mm);
+    if (i < 0) return d < months[0].first ? x0 : x1;
+    const j = dd <= 10 ? 0 : dd <= 20 ? 1 : 2, s0 = [1, 11, 21][j], len = j < 2 ? 10 : daysInMonth(yy, mm) - 20;
+    return x0 + i * cw + (cw * (j + Math.min(1, (dd - s0 + (end ? 1 : 0)) / len))) / 3;
+  };
+  const bar = (s, e, y, color) => { const a = xOf(s, false), b = Math.max(xOf(e, true), a + 2); out.push(`<line x1="${f1(a)}" y1="${f1(y)}" x2="${f1(b)}" y2="${f1(y)}" stroke="${color}" stroke-width="1.8"/>`); };
+  rows.forEach((g, k) => {
+    const y = yR + k * rh, ind = g.depth === 2 ? 14 : 4;
+    if (k) line(L0, y, R0, y);
+    text(L0 + ind, y + rh / 2, g.name, fit(g.name, cName - ind - 4, 10));
+    text(L0 + cName + cUnit / 2, y + rh / 2, g.unit, 9, "middle");
+    text(L0 + cName + cUnit + cQty / 2, y + rh / 2, String(g.qty), 9, "middle");
+    if (g.note) text(x1 + 4, y + rh / 2, g.note, fit(g.note, cNote - 8, 8.5));
+    g.plan.forEach(([s, e]) => bar(s, e, y + rh * 0.4, "#000000"));
+    g.act.forEach(([s, e]) => bar(s, e, y + rh * 0.62, "#E00000"));
+  });
+  // 凡例
+  out.push(`<line x1="${R0 - 270}" y1="${yB + 20}" x2="${R0 - 248}" y2="${yB + 20}" stroke="#000" stroke-width="1.8"/>`);
+  text(R0 - 244, yB + 20, "計画", 10);
+  out.push(`<line x1="${R0 - 200}" y1="${yB + 20}" x2="${R0 - 178}" y2="${yB + 20}" stroke="#E00000" stroke-width="1.8"/>`);
+  text(R0 - 174, yB + 20, `実績（${RM.cur.label}末まで）`, 10, "start", "#C00000");
+  out.push("</svg>");
+  return out.join("");
+}
 // 折れ線グラフ（画面の確認用。Excel では Excel のグラフにする）
 function reportSvg(RM) {
   const W = 760, Hh = 330, L = 56, Rr = 20, T = 34, B = 64;
@@ -5101,8 +5162,10 @@ function renderReport(full = true) {
     const x = RM.months[i], el = tr.querySelector(".auto");
     if (x && el) el.textContent = i === RM.k ? "今回報告" : x.manual && x.act != null ? "実績は入力値" : "";
   });
-  // 業務履行報告書：作業項目ごとの進捗
+  // 業務履行報告書：作業項目ごとの進捗と業務工程表（2 枚目と同じ形）
   $("repItemsSec").hidden = !gyomu;
+  $("repGanttSec").hidden = !gyomu;
+  if (gyomu) { $("hRepGantt").textContent = `業務工程表（実績は${RM.cur.label}末まで）`; $("rGantt").innerHTML = repGanttSvg(RM); }
   // 見出しに、どの月の末の進捗かを出す（報告する月を選ばないと前の月。期間が終わっていれば最後の月で、全部 100% になる）
   $("hRepItems").textContent = `作業項目ごとの進捗（${RM.cur.label}末現在）`;
   if (gyomu) $("repItems").innerHTML = RM.items.map(it => `<tr class="${it.depth === 2 ? "sub" : "top"}"><td>${esc(it.name)}</td><td>${esc(it.period)}</td><td>${esc(it.change)}</td>`
