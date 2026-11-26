@@ -126,6 +126,11 @@ textarea#src { display: block; width: 100%; height: 360px; resize: vertical; bor
 .linepop button { border: 1px solid var(--rule); background: var(--panel); border-radius: 5px; padding: 3px 10px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
 .linepop button svg { width: 22px; height: 6px; }
 .linepop button svg line { stroke: currentColor; stroke-width: 2; }
+table.repform .mnw { display: flex; gap: 4px; align-items: center; }
+table.repform .mnw input { flex: 1; min-width: 0; }
+table.repform select.tcol { width: auto; min-width: 4.6em; font-weight: 700; font-size: 12px; padding: 2px; }
+table.repform .ftl { display: flex; align-items: center; gap: 10px; margin-bottom: 4px; }
+table.repform tr.ft .ftl label { margin: 0; }
 .boxpop { flex-direction: column; align-items: stretch; gap: 4px; max-width: 480px; }
 .boxpop .row { display: flex; align-items: center; gap: 3px; flex-wrap: wrap; }
 .boxpop .lbl { min-width: 2.6em; }
@@ -187,8 +192,8 @@ table.tasks { border-collapse: collapse; width: 100%; min-width: 1340px; font-si
 .tasks input, .tasks select { width: 100%; padding: 4px 6px; }
 /* 日付・日数は足りる幅に決めて、残りを作業項目と備考に回す */
 .tasks input[type="date"] { width: 10.6em; }
-.tasks input[type="number"] { width: 4.4em; }
-.tasks td.name { min-width: 19.5em; }
+.tasks input[type="number"] { width: 4em; }
+.tasks td.name { min-width: 18.5em; }
 .tasks tr.cont td.name input { margin-left: 1.4em; width: calc(100% - 1.4em); }
 .tasks .nm { display: flex; gap: 4px; align-items: center; }
 .tasks .nm input { flex: 1; min-width: 0; }
@@ -200,8 +205,10 @@ table.tasks { border-collapse: collapse; width: 100%; min-width: 1340px; font-si
 .tasks tr.bad td { background: var(--warn-soft); }
 .tasks td.res { font-size: 12px; color: var(--muted); min-width: 7.4em; font-variant-numeric: tabular-nums; line-height: 1.35; }   /* 狭いときは日付と日数の間で折り返す */
 .tasks td.res .c { color: var(--chg); }
-.tasks select.swatch { border-left-width: 8px; min-width: 6.4em; }   /* バー色：色の名前が読める幅 */
-.tasks td.note { min-width: 11em; }   /* 備考：10 字くらいは見える幅（広い画面ではもっと広がる） */
+.tasks select.swatch { border-left-width: 8px; min-width: 5em; width: 5em; }   /* バー色：色の名前が読める幅 */
+.tasks select.tcol { min-width: 4.8em; width: 4.8em; font-weight: 700; padding-inline: 3px; }   /* 文字色：選んだ色で名前を出す */
+.tasks select.tcol option { font-weight: 700; }
+.tasks td.note { min-width: 9.5em; }   /* 備考：10 字くらいは見える幅（広い画面ではもっと広がる） */
 .ops { white-space: nowrap; }
 .ops button + button { margin-left: 2px; }
 .ops button { border: 1px solid var(--rule); background: var(--panel); border-radius: 4px; padding: 2px 5px; cursor: pointer; font-size: 12px; }
@@ -409,8 +416,8 @@ table.reptbl.items tr.top td:first-child { font-weight: 700; }
       <div class="tasks-wrap">
         <table class="tasks" id="tasks">
           <thead>
-            <tr><th colspan="2"></th><th colspan="3">計画</th><th colspan="3" class="chg">実績</th><th colspan="4"></th></tr>
-            <tr><th></th><th>作業項目</th><th>開始日</th><th>終了日</th><th>日数</th><th class="chg">開始日</th><th class="chg">終了日</th><th class="chg">日数</th><th>バー色</th><th>備考</th><th>計算結果</th><th></th></tr>
+            <tr><th colspan="2"></th><th colspan="3">計画</th><th colspan="3" class="chg">実績</th><th colspan="5"></th></tr>
+            <tr><th></th><th>作業項目</th><th>開始日</th><th>終了日</th><th>日数</th><th class="chg">開始日</th><th class="chg">終了日</th><th class="chg">日数</th><th>バー色</th><th>文字色</th><th>備考</th><th>計算結果</th><th></th></tr>
           </thead>
           <tbody id="taskRows"></tbody>
         </table>
@@ -2799,7 +2806,7 @@ const HEAD_FIELDS = [
 const BAR_COLORS = [["000000", "黒"], ["1F3864", "紺"], ["2E75B6", "青"], ["00B0F0", "水色"], ["548235", "緑"],
   ["BF9000", "黄土"], ["ED7D31", "橙"], ["C00000", "赤"], ["7030A0", "紫"], ["808080", "灰"]];
 const CFG_DEFAULT = { dayMode: "cal", barColor: "000000", barHeight: "35", chgColor: "C00000", oldStyle: "fill", extraOff: "", overlap: "side" };
-const ROW_FIELDS = ["name", "s", "e", "d", "cs", "ce", "cd", "color", "note", "lv"];
+const ROW_FIELDS = ["name", "s", "e", "d", "cs", "ce", "cd", "color", "note", "lv", "tcolor"];
 
 const newRow = (o = {}) => Object.assign({ id: newId(), name: "", s: "", e: "", d: "", cs: "", ce: "", cd: "", color: "", note: "", lv: "" }, o);
 function defaultSched() {
@@ -2808,9 +2815,9 @@ function defaultSched() {
   return { head, cfg: Object.assign({}, CFG_DEFAULT), rows: [], ignoreSync: "", report: defaultReport() };
 }
 // 履行報告書：報告する月（2026-05）、報告日、文章（空なら工程表から作る）、手で入れた実施の進捗率（月ごと、%）
-const REP_TEXT = ["form", "month", "date", "kStart", "kEnd", "done", "next", "remarks"];
+const REP_TEXT = ["form", "month", "date", "kStart", "kEnd", "done", "next", "remarks", "doneColor", "nextColor", "remarksColor"];
 // form：rep＝履行報告書、gyomu＝業務履行報告書（作業項目ごとの進捗の表も付ける）
-const defaultReport = () => ({ form: "rep", month: "", date: "", kStart: "", kEnd: "", done: "", next: "", remarks: "", actual: {}, mnote: {} });
+const defaultReport = () => ({ form: "rep", month: "", date: "", kStart: "", kEnd: "", done: "", next: "", remarks: "", doneColor: "", nextColor: "", remarksColor: "", actual: {}, mnote: {}, mcolor: {} });
 function normalizeSched(o) {
   const sc = defaultSched();
   if (!o || typeof o !== "object") return sc;
@@ -2827,7 +2834,7 @@ function normalizeSched(o) {
   if (o.noAuto === true) sc.noAuto = true;
   if (o.report && typeof o.report === "object") {
     REP_TEXT.forEach(k => { if (typeof o.report[k] === "string") sc.report[k] = o.report[k]; });
-    ["actual", "mnote"].forEach(f => {
+    ["actual", "mnote", "mcolor"].forEach(f => {
       if (o.report[f] && typeof o.report[f] === "object")
         Object.entries(o.report[f]).forEach(([k, v]) => { if (/^\d{4}-\d{2}$/.test(k) && typeof v === "string") sc.report[f][k] = v; });
     });
@@ -3041,15 +3048,15 @@ function ganttModel(sc, R) {
 
   // 作業の行
   items.forEach((it, i) => {
-    const r = GR.FIRST + i;
-    put(r, GC.NAME, S(it.name));
-    put(r, last, S(it.note));
+    const r = GR.FIRST + i, tc = (sc.rows[it.row] || {}).tcolor || "", col = tc ? { color: tc } : null;   // 文字色（変更・追加など）
+    put(r, GC.NAME, S(it.name), col);
+    put(r, last, S(it.note), col);
     if (it.hasChg) {
       M.rowH[r] = G_ROW_H2;
-      put(r, GC.DAYS, { t: "rich", runs: [{ text: it.days > 0 ? String(it.days) : "－" }, { text: String(it.cdays), color: R.chgColor }] }, { wrap: true });
+      put(r, GC.DAYS, { t: "rich", runs: [{ text: it.days > 0 ? String(it.days) : "－", color: tc || undefined }, { text: String(it.cdays), color: R.chgColor }] }, { wrap: true });
     } else {
       M.rowH[r] = G_ROW_H;
-      if (it.days > 0) put(r, GC.DAYS, N(it.days));
+      if (it.days > 0) put(r, GC.DAYS, N(it.days), col);
     }
   });
   if (items.length) {
@@ -3764,6 +3771,11 @@ function importFlow(silent) {
   if (!silent) toast(lost ? `手順を取り込みました。フローチャートにない作業 ${lost} 件（日付入り）は消えました。` : "フローチャートの手順を取り込みました。入れてあった日付はそのままです。", "元に戻す", undo);
 }
 
+// 文字の色（変更・追加した所を赤にするなど）。フローチャートの「文字」と同じ色
+const TEXT_COLORS = [["FF0000", "赤"], ["C00000", "濃い赤"], ["0070C0", "青"], ["00B050", "緑"], ["ED7D31", "橙"], ["7030A0", "紫"], ["808080", "灰"]];
+const tcolorOptions = sel => [`<option value=""${sel ? "" : " selected"}>標準</option>`]
+  .concat(TEXT_COLORS.map(([v, n]) => `<option value="${v}" style="color:#${v}"${sel === v ? " selected" : ""}>${n}</option>`)).join("");
+const tcolorSelect = (attrs, sel, label) => `<select ${attrs} class="tcol" aria-label="${label}" title="${label}" style="color:#${sel || "000000"}">${tcolorOptions(sel)}</select>`;
 const colorOptions = sel => [`<option value=""${sel ? "" : " selected"}>標準</option>`]
   .concat(BAR_COLORS.map(([v, n]) => `<option value="${v}"${sel === v ? " selected" : ""}>${n}</option>`)).join("");
 // 行の段：名前に「1.1.」のような番号があればそれ、なければ選んだ段（1=作業＝黄色の箱、2=小項目＝箱の中）
@@ -3784,10 +3796,11 @@ function rowHtml(r, i) {
     + [["1", "作業"], ["2", "小項目"], ["b", "枝分かれ（右）"], ["bl", "枝分かれ（左）"]].map(([v, t]) => `<option value="${v}"${lp.v === v ? " selected" : ""}>${t}</option>`).join("") + `</select>`;
   return `<tr data-id="${r.id}" class="${cont ? "cont" : lv === 2 ? "sub" : ""}">`
     + `<td class="no" title="つかんで上下にドラッグすると、行を動かせます">${i + 1}</td>`
-    + `<td class="name"><div class="nm">${pick}${inp("name", "text", ` placeholder="${cont ? "（上の作業の別の期間）" : lv === 2 ? "小項目" : "作業項目"}" aria-label="作業項目"`)}</div></td>`
+    + `<td class="name"><div class="nm">${pick}${inp("name", "text", ` placeholder="${cont ? "（上の作業の別の期間）" : lv === 2 ? "小項目" : "作業項目"}" aria-label="作業項目"${r.tcolor ? ` style="color:#${r.tcolor}"` : ""}`)}</div></td>`
     + `<td>${inp("s", "date", ' aria-label="開始日"')}</td><td>${inp("e", "date", ' aria-label="終了日"')}</td><td>${inp("d", "number", ' min="1" step="1" aria-label="日数"')}</td>`
     + `<td class="chg">${inp("cs", "date", ' aria-label="実績の開始日"')}</td><td class="chg">${inp("ce", "date", ' aria-label="実績の終了日"')}</td><td class="chg">${inp("cd", "number", ' min="1" step="1" aria-label="実績の日数"')}</td>`
     + `<td><select data-k="color" class="swatch" aria-label="バー色">${colorOptions(r.color)}</select></td>`
+    + `<td>${cont ? "" : tcolorSelect('data-k="tcolor"', r.tcolor, "文字色（作業項目・日数・備考の文字）")}</td>`
     + `<td class="note">${inp("note", "text", ' aria-label="備考"')}</td>`
     + `<td class="res"></td>`
     + `<td class="ops"><button type="button" data-act="period" title="この作業に別の期間を足す">＋期間</button><button type="button" data-act="up" title="上へ">↑</button><button type="button" data-act="down" title="下へ">↓</button><button type="button" data-act="del" title="この行を消す">×</button></td>`
@@ -3983,6 +3996,11 @@ taskRows.addEventListener("input", e => {
   }
   sched.rows[i][k] = e.target.value;
   if (k === "color") paintSwatches();
+  if (k === "tcolor") {
+    e.target.style.color = `#${e.target.value || "000000"}`;
+    const nm = e.target.closest("tr").querySelector('[data-k="name"]');
+    if (nm) nm.style.color = e.target.value ? `#${e.target.value}` : "";   // 作業項目の文字も同じ色で見せる
+  }
   clearTimeout(planTimer);
   planTimer = setTimeout(planUpdate, k === "name" || k === "note" ? 250 : 0);
 });
@@ -5012,7 +5030,7 @@ function reportModel(sc) {
     const as = Math.min(...list.map(p => p.as)), ae = Math.max(...list.map(p => p.ae));
     const n = per.filter(p => p.item === i).length;
     const state = ac >= 1 ? "完了" : ac <= 0 ? (pl > 0 ? "未着手（遅れ）" : "未着手") : ac < pl - 1e-9 ? "実施中（遅れ）" : "実施中";
-    items.push({ name: it.name, depth, plan: pl, act: ac, period: `${md(ps)}〜${md(pe)}${n > 1 ? `（${n}回）` : ""}`,
+    items.push({ name: it.name, tcolor: (sc.rows[it.row] || {}).tcolor || "", depth, plan: pl, act: ac, period: `${md(ps)}〜${md(pe)}${n > 1 ? `（${n}回）` : ""}`,
                  change: as !== ps || ae !== pe ? `${md(as)}〜${md(ae)}` : "", state });
   });
   // 業務履行報告書：月ごとの備考の案（その月にかかっている作業。小項目は上の作業の名前、照査・打合せは除く）
@@ -5033,7 +5051,7 @@ function reportModel(sc) {
       const sub = per.filter(p => kidsOf(i).includes(p.item));
       if (sub.length) list = [{ ps: Math.min(...sub.map(p => p.ps)), pe: Math.max(...sub.map(p => p.pe)), as: Math.min(...sub.map(p => p.as)), ae: Math.max(...sub.map(p => p.ae)) }];
     }
-    return { name: it.name, depth: depthOf(i), note: it.note || "", unit: many ? "回" : "式", qty: many ? list.length : 1,
+    return { name: it.name, tcolor: (sc.rows[it.row] || {}).tcolor || "", depth: depthOf(i), note: it.note || "", unit: many ? "回" : "式", qty: many ? list.length : 1,
              plan: list.map(p => [p.ps, p.pe]), act: list.filter(p => p.as <= cur.last).map(p => [p.as, Math.min(p.ae, cur.last)]) };
   });
   const changed = R.pers.some(p => p.hasChg);
@@ -5083,10 +5101,10 @@ function repGanttSvg(RM) {
   rows.forEach((g, k) => {
     const y = yR + k * rh, ind = g.depth === 2 ? 14 : 4;
     if (k) line(L0, y, R0, y);
-    text(L0 + ind, y + rh / 2, g.name, fit(g.name, cName - ind - 4, 10));
+    text(L0 + ind, y + rh / 2, g.name, fit(g.name, cName - ind - 4, 10), "start", g.tcolor ? `#${g.tcolor}` : "#000");
     text(L0 + cName + cUnit / 2, y + rh / 2, g.unit, 9, "middle");
     text(L0 + cName + cUnit + cQty / 2, y + rh / 2, String(g.qty), 9, "middle");
-    if (g.note) text(x1 + 4, y + rh / 2, g.note, fit(g.note, cNote - 8, 8.5));
+    if (g.note) text(x1 + 4, y + rh / 2, g.note, fit(g.note, cNote - 8, 8.5), "start", g.tcolor ? `#${g.tcolor}` : "#000");
     g.plan.forEach(([s, e]) => bar(s, e, y + rh * 0.4, "#000000"));
     g.act.forEach(([s, e]) => bar(s, e, y + rh * 0.62, "#E00000"));
   });
@@ -5151,10 +5169,14 @@ function repFormHtml(RM, gyomu) {
   const rows = RM.months.map((x, i) => {
     const after = i > k;
     const act = `<input type="text" inputmode="decimal" data-act="${x.key}" value="${esc(rp.actual[x.key] || "")}" placeholder="${after ? "" : gyomu ? pctInt(x.auto) : pct1(x.auto)}" aria-label="${x.label}の実施工程（%）"${after ? " disabled" : ""}>`;
-    const note = gyomu ? `<input type="text" data-mnote="${x.key}" value="${esc(rp.mnote[x.key] || "")}" placeholder="${after ? "" : esc(x.noteAuto)}" aria-label="${x.label}の備考"${after ? " disabled" : ""}>` : `<span class="auto"></span>`;
+    const mc = rp.mcolor[x.key] || "";
+    const note = gyomu ? `<div class="mnw"><input type="text" data-mnote="${x.key}" value="${esc(rp.mnote[x.key] || "")}" placeholder="${after ? "" : esc(x.noteAuto)}" aria-label="${x.label}の備考"${after ? " disabled" : ""}${mc ? ` style="color:#${mc}"` : ""}>`
+      + `${after ? "" : tcolorSelect(`data-mcolor="${x.key}" id="mc_${x.key}"`, mc, `${x.label}の備考の文字色`)}</div>` : `<span class="auto"></span>`;
     return `<tr data-key="${x.key}" class="${i === k ? "cur" : after ? "after" : ""}"><td>${repMonthLabel(x, i, gyomu)}</td><td>${plan(x)}</td><td>${act}</td><td class="mn">${note}</td></tr>`;
   }).join("");
-  const box = (key, label, ph = "") => `<tr class="ft"><td colspan="4"><label for="r_${key}">${label}</label><textarea id="r_${key}" data-r="${key}" rows="3"${ph ? ` placeholder="${esc(ph)}"` : ""}>${esc(rp[key])}</textarea></td></tr>`;
+  const box = (key, label, ph = "") => { const c = rp[key + "Color"] || "";
+    return `<tr class="ft"><td colspan="4"><div class="ftl"><label for="r_${key}">${label}</label>${tcolorSelect(`data-r="${key}Color" id="r_${key}Color"`, c, `${label.replace(/（.*$/, "")}の文字色`)}</div>`
+      + `<textarea id="r_${key}" data-r="${key}" rows="3"${ph ? ` placeholder="${esc(ph)}"` : ""}${c ? ` style="color:#${c}"` : ""}>${esc(rp[key])}</textarea></td></tr>`; };
   const foot = gyomu ? box("remarks", "（記事欄）")
     : box("done", "今月の実施内容（空なら、工程表からこの文章を入れます）", RM.doneAuto) + box("next", "来月の予定（空なら、工程表からこの文章を入れます）", RM.nextAuto) + box("remarks", "備考");
   return `<caption>${gyomu ? "業 務 履 行 報 告 書" : "履 行 報 告 書"}</caption><colgroup><col class="c1"><col class="c2"><col class="c3"><col></colgroup>`
@@ -5186,7 +5208,7 @@ function renderReport(full = true) {
   if (gyomu) { $("hRepGantt").textContent = `業務工程表（実績は${RM.cur.label}末まで）`; $("rGantt").innerHTML = repGanttSvg(RM); }
   // 見出しに、どの月の末の進捗かを出す（報告する月を選ばないと前の月。期間が終わっていれば最後の月で、全部 100% になる）
   $("hRepItems").textContent = `作業項目ごとの進捗（${RM.cur.label}末現在）`;
-  if (gyomu) $("repItems").innerHTML = RM.items.map(it => `<tr class="${it.depth === 2 ? "sub" : "top"}"><td>${esc(it.name)}</td><td>${esc(it.period)}</td><td>${esc(it.change)}</td>`
+  if (gyomu) $("repItems").innerHTML = RM.items.map(it => `<tr class="${it.depth === 2 ? "sub" : "top"}"><td${it.tcolor ? ` style="color:#${it.tcolor}"` : ""}>${esc(it.name)}</td><td>${esc(it.period)}</td><td>${esc(it.change)}</td>`
     + `<td>${pct1(it.plan)}%</td><td>${pct1(it.act)}%</td><td class="${/遅れ/.test(it.state) ? "minus" : ""}">${esc(it.state)}</td></tr>`).join("")
     || `<tr><td colspan="6" class="hint">日付の入った作業がありません。</td></tr>`;
   $("rPaper").innerHTML = reportSvg(RM);
@@ -5202,6 +5224,11 @@ $("repForm").addEventListener("input", e => {
     sched.head[d.h] = el.value;
     const h = $(`h_${d.h}`);
     if (h) h.value = el.value;
+  } else if (d.mcolor) {
+    // 月ごとの備考の文字色
+    if (el.value) sched.report.mcolor[d.mcolor] = el.value; else delete sched.report.mcolor[d.mcolor];
+    renderReport(true);
+    const sel = $(`mc_${d.mcolor}`); if (sel) sel.focus();
   } else if (d.mnote) {
     if (clean(el.value)) sched.report.mnote[d.mnote] = el.value; else delete sched.report.mnote[d.mnote];
   } else if (d.act) {
@@ -5209,9 +5236,10 @@ $("repForm").addEventListener("input", e => {
     renderReport(false);
   } else if (d.r) {
     sched.report[d.r] = el.value;
-    // 報告する月を変えたら表を作り直す（選んだ欄はそのまま）
-    renderReport(d.r === "month");
-    if (d.r === "month") $("r_month").focus();
+    // 報告する月・文字色を変えたら表を作り直す（選んだ欄はそのまま）
+    const full = d.r === "month" || /Color$/.test(d.r);
+    renderReport(full);
+    if (full && el.id && $(el.id)) $(el.id).focus();
   } else return;
   savePlan();
 });
@@ -5300,12 +5328,12 @@ function reportXlsxParts(RM, sc) {
   const chartTop = r, chartRows = 16;
   r += chartRows + 1;
   // 3〜5. 文章
-  const texts = [["今月の実施内容", clean(rp.done) ? rp.done : RM.doneAuto], ["来月の予定", clean(rp.next) ? rp.next : RM.nextAuto], ["備考", rp.remarks || ""]];
-  for (const [title, body] of texts) {
+  const texts = [["今月の実施内容", clean(rp.done) ? rp.done : RM.doneAuto, rp.doneColor], ["来月の予定", clean(rp.next) ? rp.next : RM.nextAuto, rp.nextColor], ["備考", rp.remarks || "", rp.remarksColor]];
+  for (const [title, body, tcol] of texts) {
     blocks.push([r, r + 1]);
     put(r, 1, secTitle(title), { b: true }); merge(r, 1, r, LAST); r++;
     const txt = String(body).replace(/\r\n?/g, "\n").replace(/\s+$/, "");
-    put(r, 1, txt, { va: "top", wrap: true, indent: 1 }); merge(r, 1, r, LAST); frame(r, 1, r, LAST);
+    put(r, 1, txt, { va: "top", wrap: true, indent: 1, color: tcol || "" }); merge(r, 1, r, LAST); frame(r, 1, r, LAST);
     rowH[r] = Math.max(2, lines(txt)) * 15 + 8; r += 2;
   }
   const lastRow = r - 2;
@@ -5561,12 +5589,12 @@ function gyomuXlsxParts(RM, sc) {
     A.put(r, 2, RM.changed && ch !== pl ? `${pl}（${ch}）` : pl, { ha: "center" });
     if (x.act != null) A.put(r, 3, pctInt(x.act), { ha: "center" });
     const note = i <= k ? (clean(rp.mnote[x.key] || "") ? rp.mnote[x.key] : x.noteAuto) : "";
-    A.put(r, 4, note, { va: "top", wrap: true, indent: 1 }); A.merge(r, 4, r, L1);
+    A.put(r, 4, note, { va: "top", wrap: true, indent: 1, color: rp.mcolor[x.key] || "" }); A.merge(r, 4, r, L1);
     A.grid(r, 1, r, 3); A.box(r, 4, r, L1);
     A.sh.rowH[r] = note.length > 26 ? 36 : 26; r++;
   });
   const memo = `（記事欄）${clean(rp.remarks) ? "\n" + String(rp.remarks).replace(/\r\n?/g, "\n").replace(/\s+$/, "") : ""}`;
-  A.put(r, 1, memo, { va: "top", wrap: true }); A.merge(r, 1, r, L1); A.box(r, 1, r, L1);
+  A.put(r, 1, memo, { va: "top", wrap: true, color: rp.remarksColor || "" }); A.merge(r, 1, r, L1); A.box(r, 1, r, L1);
   A.sh.rowH[r] = Math.max(90, memo.split("\n").length * 16 + 20); r += 2;
   // 確認の欄（総括調査員・主任調査員・調査員・調査員／管理技術者）
   [["総　括\n調査員", 4], ["主　任\n調査員", 5], ["調査員", 6], ["調査員", 7], ["管理技術\n者", 9]].forEach(([t, c]) => A.put(r, c, t, { ha: "center", wrap: true, sz: 9 }));
@@ -5597,9 +5625,9 @@ function gyomuXlsxParts(RM, sc) {
   r = h2 + 1;
   const first = r;
   RM.gantt.forEach(g => {
-    B.put(r, 1, g.depth === 2 ? `　${g.name}` : g.name, { sz: 8, wrap: true });
+    B.put(r, 1, g.depth === 2 ? `　${g.name}` : g.name, { sz: 8, wrap: true, color: g.tcolor || "" });
     B.put(r, 2, g.unit, { ha: "center", sz: 8 }); B.put(r, 3, g.qty, { ha: "center", sz: 8 });
-    B.put(r, cNote, g.note, { sz: 7, wrap: true });
+    B.put(r, cNote, g.note, { sz: 7, wrap: true, color: g.tcolor || "" });
     B.sh.rowH[r] = 22; r++;
   });
   const lastG = r - 1;
