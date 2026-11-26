@@ -184,7 +184,7 @@ for _ in range(3): doc.add_paragraph()
 para('フローチャート・工程表作成ツール', 24, True, ACCENT, WD_ALIGN_PARAGRAPH.CENTER, 8)
 para('操作説明書', 22, True, None, WD_ALIGN_PARAGRAPH.CENTER, 36)
 img('f_paper', 4.6)
-para('バージョン 1.13.2', 10.5, None, None, WD_ALIGN_PARAGRAPH.CENTER, 18)
+para('バージョン 1.14.0', 10.5, None, None, WD_ALIGN_PARAGRAPH.CENTER, 18)
 p = doc.add_paragraph(); p.alignment = WD_ALIGN_PARAGRAPH.LEFT
 for i, t in enumerate(['概要', '動作環境と起動', '画面構成', 'フローチャートの作成', '図の編集', 'PowerPoint への出力',
                        '工程表の作成', 'Excel への出力', '工程表からフローチャートへの反映', '履行報告書・業務履行報告書の作成', '入力の保存と読み込み', 'よくある質問']):
@@ -287,6 +287,7 @@ TAB = [
     ('並行の分岐点・合流点をドラッグ', '並行作業の分岐元・合流先を変更します。'),
     ('矢印の端を別の箱へドラッグ', '接続先を変更します。'),
     ('線をクリック', '実線・点線の切り替え、または削除を選択します。'),
+    ('箱をクリック', 'その行を選び、箱の色を選ぶ窓を表示します。黄色の箱（見出し）・小項目・照査打合せの箱を 1 つずつ変えられ、PowerPoint と画像にもその色で出ます。[[標準]] でスタイルの色に戻ります。'),
     ('箱をクリックして Delete キー', 'その作業を削除します。'),
 ]
 t = doc.add_table(rows=1, cols=2); t.style = 'Table Grid'; t.alignment = WD_TABLE_ALIGNMENT.CENTER
