@@ -184,7 +184,7 @@ for _ in range(3): doc.add_paragraph()
 para('フローチャート・工程表作成ツール', 24, True, ACCENT, WD_ALIGN_PARAGRAPH.CENTER, 8)
 para('操作説明書', 22, True, None, WD_ALIGN_PARAGRAPH.CENTER, 36)
 img('f_paper', 4.6)
-para('バージョン 1.12.0', 10.5, None, None, WD_ALIGN_PARAGRAPH.CENTER, 18)
+para('バージョン 1.12.1', 10.5, None, None, WD_ALIGN_PARAGRAPH.CENTER, 18)
 p = doc.add_paragraph(); p.alignment = WD_ALIGN_PARAGRAPH.LEFT
 for i, t in enumerate(['概要', '動作環境と起動', '画面構成', 'フローチャートの作成', '図の編集', 'PowerPoint への出力',
                        '工程表の作成', 'Excel への出力', '工程表からフローチャートへの反映', '履行報告書・業務履行報告書の作成', '入力の保存と読み込み', 'よくある質問']):
@@ -217,7 +217,7 @@ steps([
 ])
 h2('HTML 版の起動')
 para('「フローチャート・工程表作成ツール.html」をダブルクリックし、Edge または Chrome で開きます。機能は EXE 版と同じです。')
-para('履行報告書を使わない場合は、履行報告書のタブのない「フローチャート・工程表作成ツール（フロー・工程表のみ）.html」も使えます（リリースのページの FlowKouteiTool_FlowPlanOnly.html）。フローチャートと工程表の機能は同じで、第 10 章の履行報告書だけがありません。')
+para('履行報告書を使わない場合は、履行報告書のタブのない版も使えます。HTML 版は「フローチャート・工程表作成ツール（フロー・工程表のみ）.html」（リリースのページの FlowKouteiTool_FlowPlanOnly.html）、EXE 版は FlowKouteiTool_FlowPlanOnly.zip の中の「フローチャート・工程表作成ツール（フロー・工程表のみ）.exe」です。フローチャートと工程表の機能は同じで、第 10 章の履行報告書だけがありません。EXE 版の自動で保持される入力内容は、ふつうの版とは別です。')
 box('warn', [
     '起動時に「Microsoft Edge WebView2 ランタイム」が入っていない旨のメッセージが表示された場合は、システム管理者に Microsoft Edge WebView2 ランタイムの導入を依頼してください。',
     'EXE ファイルのダウンロードや実行が制限されている環境では、HTML 版を使用してください。',

@@ -5,3 +5,4 @@ app/obj/
 app/tool.html
 dist/
 *.exe
+app_fp/

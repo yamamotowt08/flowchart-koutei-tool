@@ -14,10 +14,17 @@ namespace FlowKouteiTool
 {
     static class Program
     {
+#if FLOWPLAN
+        // フローチャートと工程表だけの版（履行報告書のタブなし）。ふつうの版と取り出し先を分ける
+        internal const string Title = "フローチャート・工程表作成ツール（フロー・工程表のみ）";
+        const string DirName = "FlowKouteiToolFP";
+#else
         internal const string Title = "フローチャート・工程表作成ツール";
+        const string DirName = "FlowKouteiTool";
+#endif
         // 作業用のフォルダは各自のパソコンに作る（共有フォルダに書き込まないように）
         internal static readonly string LocalDir =
-            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "FlowKouteiTool");
+            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), DirName);
         internal static string LibDir;
 
         [STAThread]
