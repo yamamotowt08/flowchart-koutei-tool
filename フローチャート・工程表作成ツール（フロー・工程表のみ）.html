@@ -3405,7 +3405,7 @@ function planItems(withNum) {   // withNum：作業の名前に番号（1. 2.）
     const text = withNum && m && depth === 1 && !isBranchRow(r) ? name : bare, key = itemKey(text);
     // 形を覚えていない行（工程表で打った行）は、照査・打合せらしい名前なら直前の手順から横に分ける
     const fs = isNoteName(bare, !!m, depth === 2) && !(r.fs && ["note", "lane", "side"].includes(r.fs.kind)) ? { kind: "note" } : r.fs || null;
-    items.push({ text, depth, key, fs, typed: !r.fs, left: !!(fs && fs.kind === "note" && fs.left), per: grow(null, res[i]) });
+    items.push({ text, depth, key, fs, typed: !r.fs, left: !!(fs && fs.kind === "note" && fs.left), per: grow(null, res[i]), tcolor: r.tcolor || "" });
   });
   // 「3.打合せ」の下に「3.1.第1回」などがあれば、見出しの打合せは消して、下の行をそれぞれ打合せの箱にする（打合せ①②…）
   for (let i = 0; i < items.length; i++) {
@@ -3573,6 +3573,30 @@ function sortFlowByDate(P) {
   prevLines = out.map(r => r.t);
   return moved;
 }
+// 工程表の「文字色」を、フローチャートの同じ名前の箱（作業・小項目・照査打合せ）の文字の色にする。
+// 工程表が元：色のない行の箱は標準に戻す。工程表にない箱（開始・終了・業務納品など）の色はそのまま。
+// 同じ名前が何回も出るときは、上から順に組にする
+function applyPlanColors() {
+  const L = state.L;
+  if (!L) return 0;
+  const queue = new Map();
+  planItems().forEach(p => { const k = (isNoteItem(p) ? "@" : "") + p.key; if (!queue.has(k)) queue.set(k, []); queue.get(k).push(p.tcolor || ""); });
+  const take = k => { const q = queue.get(k); return q && q.length ? q.shift() : undefined; };
+  const nameKey = t => itemKey(clean(String(t || "").replace(SUBNUM_RE, "").replace(ITEM_NUM_RE, "")));
+  let changed = 0;
+  const set = (key, c) => {
+    if (c === undefined || (textColors[key] || "") === c) return;
+    if (c) textColors[key] = c; else delete textColors[key];
+    changed++;
+  };
+  for (const n of L.nodes) {
+    if (n.kind === "bar") continue;
+    set(n.key, take(nameKey(n.text)));
+    (n.subBoxes || []).forEach(b => set(b.key, take(nameKey(b.label))));
+  }
+  for (const nt of L.notes) set(nt.key, take("@" + nameKey(nt.text)));
+  return changed;
+}
 function exportToFlow(withNum) {
   const PA = planItems(withNum === true);
   // 番号を付ける・外すを選んだとき（作業項目に番号があるとき）だけ、番号のちがいも直す
@@ -3631,11 +3655,13 @@ function exportToFlow(withNum) {
     pLeft.forEach(p => ops.push({ p, add: true }));
   }
   if (!ops.some(o => o.rename || o.del || o.add)) {
-    if (!sorted) { toast("フローチャートは、工程表の作業項目と同じです。"); return; }
+    const colored = applyPlanColors();
+    if (colored) update();
+    if (!sorted && !colored) { toast("フローチャートは、工程表の作業項目と同じです。"); return; }
     sched.ignoreSync = "";
     planUpdate();
     commit();
-    toast("フローチャートの手順を、工程表の開始日の順に並べ替えました。", "元に戻す", undo);
+    toast(sorted ? `フローチャートの手順を、工程表の開始日の順に並べ替えました${colored ? "（文字色も反映）" : ""}。` : "工程表の文字色をフローチャートに反映しました。", "元に戻す", undo);
     return;
   }
 
@@ -3737,10 +3763,12 @@ function exportToFlow(withNum) {
   });
   if (blank) { $("optSize").value = "a4p"; $("optStyle").value = "gyomu"; }   // A4 縦・業務フロー（黄色）
   update();
+  const colored = applyPlanColors();
+  if (colored) update();
   sched.ignoreSync = "";
   planUpdate();
   commit();
-  const what = [sorted && "開始日の順に並べ替え", counts.add && `追加 ${counts.add}`, counts.rename && `名前の変更 ${counts.rename}`, counts.del && `削除 ${counts.del}`].filter(Boolean).join("・");
+  const what = [sorted && "開始日の順に並べ替え", counts.add && `追加 ${counts.add}`, counts.rename && `名前の変更 ${counts.rename}`, counts.del && `削除 ${counts.del}`, colored && "文字色"].filter(Boolean).join("・");
   toast(`工程表の作業項目をフローチャートに反映しました（${what}）。`, "元に戻す", undo);
 }
 
