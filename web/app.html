@@ -5514,6 +5514,9 @@ async function saveReport() {
 
 // ---------- 切り替え ----------
 const VIEWS = { flow: ["flowView", "tabFlow"], plan: ["planView", "tabPlan"], report: ["repView", "tabRep"] };
+// フロー・工程表だけの版（作り直しのときに true になる）：履行報告書のタブを出さない
+const NO_REPORT = __NO_REPORT__;
+if (NO_REPORT) { delete VIEWS.report; $("tabRep").hidden = true; }
 function setView(v) {
   view = VIEWS[v] ? v : "flow";
   const flow = view === "flow";

@@ -14,7 +14,7 @@
     <Prefer32Bit>false</Prefer32Bit>
     <Product>フローチャート・工程表作成ツール</Product>
     <AssemblyTitle>フローチャート・工程表作成ツール</AssemblyTitle>
-    <Version>1.11.1</Version>
+    <Version>1.12.0</Version>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <WebView2Version>1.0.4314.35</WebView2Version>
   </PropertyGroup>

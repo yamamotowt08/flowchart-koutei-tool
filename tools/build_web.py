@@ -13,6 +13,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SRC = os.path.join(ROOT, 'web', 'app.html')
 OUT = os.path.join(ROOT, 'フローチャート・工程表作成ツール.html')   # ダブルクリックで開く HTML 版
 APP_OUT = os.path.join(ROOT, 'app', 'tool.html')                       # EXE 版の中に入れる本体（同じ中身）
+NR_OUT = os.path.join(ROOT, 'フローチャート・工程表作成ツール（フロー・工程表のみ）.html')   # 履行報告書のタブのない版
 
 SKIP = ('ppt/printerSettings/', 'docProps/thumbnail', 'ppt/slides/')
 
@@ -56,12 +57,17 @@ def main():
     assert page.count('__PDFJS__') == 1
     page = page.replace('__PDFJS__', pdfjs)
 
-    doc = ('<!doctype html>\n<html lang="ja">\n<head>\n<meta charset="utf-8">\n'
-           '<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">\n'
-           '</head>\n<body>\n' + page + '\n</body>\n</html>\n')
-    for out in (OUT, APP_OUT):
+    # 履行報告書のタブを出すかどうか（フロー・工程表だけの版は出さない）
+    assert page.count('__NO_REPORT__') == 1
+    full, nr = page.replace('__NO_REPORT__', 'false'), page.replace('__NO_REPORT__', 'true')
+    nr = nr.replace('<title>フローチャート・工程表作成</title>', '<title>フローチャート・工程表作成（フロー・工程表のみ）</title>', 1)
+    wrap = lambda body: ('<!doctype html>\n<html lang="ja">\n<head>\n<meta charset="utf-8">\n'
+                         '<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">\n'
+                         '</head>\n<body>\n' + body + '\n</body>\n</html>\n')
+    for out, body in ((OUT, full), (APP_OUT, full), (NR_OUT, nr)):
         with open(out, 'w', encoding='utf-8') as f:
-            f.write(doc)
+            f.write(wrap(body))
+    page = full
     # Artifact 用（骨組みは公開時に付く）
     if len(sys.argv) > 1:
         with open(sys.argv[1], 'w', encoding='utf-8') as f:
