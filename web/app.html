@@ -1576,7 +1576,14 @@ const NOTE_LINE_RE = /照査|打合|打ち合/;
 //  ・「耐震性能照査検討」のように後ろに言葉が続く名前、「4.1 機場本体の照査」のような番号付きや小項目は、ふつうの作業
 const NOTE_PURE_RE = /^(第\s*[0-9０-９]+\s*回\s*)?(照査|打ち?合わ?せ(協議)?)\s*([（(][^）)]*[)）]|[①-⑳]|[0-9０-９]+\s*回目?)?$/;
 const NOTE_TAIL_RE = /(照査|打ち?合わ?せ(協議)?)\s*([（(][^）)]*[)）]|[①-⑳])?$/;
-const isNoteName = (name, numbered = false, sub = false) => { const t = clean(name || ""); return NOTE_PURE_RE.test(t) || (!numbered && !sub && NOTE_TAIL_RE.test(t)); };
+//  ・「課長照査」「社内照査」「管理技術者による照査」のような人・役職の照査は、小項目でも番号付きでも、いつも
+//  ・「現地打合せ」「関係機関との打合せ」のように最後が打合せの名前は、番号がなければ小項目でも
+const NOTE_ROLE_RE = /(課長|部長|次長|所長|室長|係長|主任|主査|上司|社内|内部|担当者?|管理技術者|照査技術者|技術者|責任者|グループ長|チーム長|リーダー)\s*(による|の)?\s*照査\s*([（(][^）)]*[)）]|[①-⑳])?$/;
+const NOTE_MEET_RE = /打ち?合わ?せ(協議)?\s*([（(][^）)]*[)）]|[①-⑳])?$/;
+const isNoteName = (name, numbered = false, sub = false) => {
+  const t = clean(name || "");
+  return NOTE_PURE_RE.test(t) || NOTE_ROLE_RE.test(t) || (!numbered && NOTE_MEET_RE.test(t)) || (!numbered && !sub && NOTE_TAIL_RE.test(t));
+};
 // ①②…の番号を付けるのは、名前が「照査」「打合せ」だけのもの（「詳細設計照査」「現地打合せ」などには付けない）
 const NUMBERED_NOTE_RE = /^(照査|打ち?合わ?せ?)$/;
 // 名前の頭の「1.」「1.1.」などの番号
@@ -1599,11 +1606,11 @@ function convertNotes(num) {
   units.forEach((u, i) => {
     const subs = u.subs || [];
     if (i > 0 && u.kind === "proc" && !u.chain.length && !keep.has(i) && noteText(u.text, false) && u.line !== cur && !subs.some(sb => sb.line === cur)) {
-      // 手順そのものが照査・打合せ：小項目があれば、それぞれを照査・打合せの箱にする
-      const head = strip(u.text);
-      change.push([u.line, subs.length ? subs.map(sb => noteSafe(noteLabel(head, strip(sb.text)))) : [noteSafe(head)]]);
-      subs.forEach(sb => drop.push(sb.line));
-      return;
+      // 手順そのものが照査・打合せ：小項目が回数（第1回・①）なら、それぞれを照査・打合せの箱にする（打合せ①②）。
+      // ふつうの小項目なら、照査・打合せの行だけを書き換え、小項目はそのまま（上の黄色の箱の中身になる）
+      const head = strip(u.text), absorb = subs.length && subs.every(sb => COUNT_RE.test(strip(sb.text)) || noteText(sb.text, true));
+      change.push([u.line, absorb ? subs.map(sb => noteSafe(noteLabel(head, strip(sb.text)))) : [noteSafe(head)]]);
+      if (absorb) { subs.forEach(sb => drop.push(sb.line)); return; }
     }
     subs.forEach(sb => { if (sb.line !== cur && noteText(sb.text, true)) change.push([sb.line, [noteSafe(strip(sb.text))]]); });
   });
@@ -3312,6 +3319,11 @@ function planItems(withNum) {   // withNum：作業の名前に番号（1. 2.）
   for (let i = 0; i < items.length; i++) {
     const h = items[i];
     if (h.depth !== 1 || !isNoteItem(h) || !items[i + 1] || items[i + 1].depth !== 2) continue;
+    // 下の小項目が回数（第1回・①・2回目）か照査・打合せのときだけ。ふつうの小項目は黄色の箱の中身なので、
+    // 枝分かれは小項目の間で 1 つだけ分かれる（「課長照査（修正）」のようにはしない）
+    let ok = true;
+    for (let j = i + 1; j < items.length && items[j].depth === 2; j++) if (!isNoteItem(items[j]) && !COUNT_RE.test(clean(items[j].text))) ok = false;
+    if (!ok) continue;
     for (let j = i + 1; j < items.length && items[j].depth === 2; j++) {
       const c = items[j];
       if (!isNoteItem(c)) { c.text = noteLabel(h.text, c.text); c.key = itemKey(c.text); c.fs = h.left ? { kind: "note", left: true } : { kind: "note" }; c.left = h.left; }
@@ -3366,7 +3378,11 @@ function planItems(withNum) {   // withNum：作業の名前に番号（1. 2.）
     if (isNoteItem(it)) {
       if (fs.anchor) { it.anchor = fs.anchor; it.place = "after"; }
       else if (lane) { it.anchor = lane; it.place = "after"; }
-      else if (anc) { it.anchor = anc; it.place = it.depth === 1 || pastSide ? "after" : nSubs && !cnt ? "head" : cnt && cnt < nSubs ? `between${cnt}` : "after"; }
+      else if (anc) {
+        // 作業の段の枝分かれでも、あとに同じ箱の小項目が続くなら、小項目の間（または見出しの横）に置く
+        const next = items.slice(i + 1).find(x => !isNoteItem(x)), inBox = it.depth === 2 || (next && next.depth === 2);
+        it.anchor = anc; it.place = !inBox || pastSide ? "after" : nSubs && !cnt ? "head" : cnt && cnt < nSubs ? `between${cnt}` : "after";
+      }
       else { it.anchor = ""; it.place = "after"; }
       return;
     }
